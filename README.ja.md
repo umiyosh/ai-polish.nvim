@@ -1,3 +1,7 @@
+[![CI](https://github.com/umiyosh/ai-polish.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/umiyosh/ai-polish.nvim/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Neovim](https://img.shields.io/badge/Neovim-0.11%2B-57A143?logo=neovim&logoColor=white)](https://neovim.io)
+
 # ai-polish.nvim
 
 [English](README.md) | 日本語
@@ -5,10 +9,6 @@
 Gemini で文章を校正・推敲する Neovim プラグイン。
 
 選択範囲またはバッファ全体を Gemini に送り、返ってきた修正候補をバッファ上の下線とフローティングウィンドウで示す。候補はキーボードで 1 件ずつ採用・却下する。専用のメイン画面は持たない。
-
-[![CI](https://github.com/umiyosh/ai-polish.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/umiyosh/ai-polish.nvim/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![Neovim](https://img.shields.io/badge/Neovim-0.11%2B-57A143?logo=neovim&logoColor=white)](https://neovim.io)
 
 ![誤字の修正候補を示す AI Polish のポップアップ](docs/images/screenshot-ja.png)
 

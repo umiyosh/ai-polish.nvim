@@ -1,3 +1,8 @@
+
+[![CI](https://github.com/umiyosh/ai-polish.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/umiyosh/ai-polish.nvim/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Neovim](https://img.shields.io/badge/Neovim-0.11%2B-57A143?logo=neovim&logoColor=white)](https://neovim.io)
+
 # ai-polish.nvim
 
 English | [日本語](README.ja.md)
@@ -5,10 +10,6 @@ English | [日本語](README.ja.md)
 Proofread and polish prose in Neovim with Gemini.
 
 Send the visual selection or the whole buffer to Gemini, see the suggested fixes as underlines in the buffer plus a floating window, and accept or reject them one by one from the keyboard. No main window, no extra UI.
-
-[![CI](https://github.com/umiyosh/ai-polish.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/umiyosh/ai-polish.nvim/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![Neovim](https://img.shields.io/badge/Neovim-0.11%2B-57A143?logo=neovim&logoColor=white)](https://neovim.io)
 
 ![AI Polish popup suggesting a typo fix](docs/images/screenshot-en.png)
 
