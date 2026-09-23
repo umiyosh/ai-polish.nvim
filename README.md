@@ -11,7 +11,7 @@ Proofread and polish prose in Neovim with Gemini.
 
 Send the visual selection or the whole buffer to Gemini, see the suggested fixes as underlines in the buffer plus a floating window, and accept or reject them one by one from the keyboard. No main window, no extra UI.
 
-![AI Polish popup suggesting a typo fix](docs/images/screenshot-en.png)
+![Demo: proofreading a buffer and accepting suggestions in the AI Polish popup](docs/images/demo-en.gif)
 
 ## Requirements
 
