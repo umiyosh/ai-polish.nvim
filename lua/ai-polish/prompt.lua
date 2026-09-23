@@ -16,14 +16,11 @@ Rules:
 - If there is nothing to fix, return an empty `suggestions` array.
 - `message` briefly explains why the change is needed.]]
 
----@param opts { filetype?: string, language?: string, instructions?: string }
+---@param opts { filetype?: string, language: string, instructions?: string }
 function M.system(opts)
   local parts = { BASE }
-  if opts.language then
-    parts[#parts + 1] = ("- Write `message` in %s."):format(opts.language)
-  else
-    parts[#parts + 1] = "- Write `message` in the same language as the input text."
-  end
+  -- `before` / `after` stay in the text's own language; only the explanation follows the UI.
+  parts[#parts + 1] = ("- Write `message` in %s, regardless of the language of the input text."):format(opts.language)
   if opts.filetype and opts.filetype ~= "" then
     parts[#parts + 1] = ("- The text comes from a `%s` file; treat its syntax as markup, not prose."):format(
       opts.filetype
