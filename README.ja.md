@@ -54,7 +54,7 @@ Gemini で文章を校正・推敲する Neovim プラグイン。
 2. 環境変数 `GEMINI_API_KEY`
 3. 環境変数 `GOOGLE_API_KEY`
 
-キーを設定ファイルに直書きしないこと。シェルで環境変数に入れるか、パスワードマネージャから関数で読む。
+キーを設定ファイルに直書きしないこと。シェルで環境変数に入れるか、パスワードマネージャから関数で読む。関数は初回の使用時に呼ばれ、結果は次に `setup()` するまでキャッシュされる。失敗したり空文字を返したりした場合は、次回また呼ばれる。空文字で export された環境変数は未設定とみなす。
 
 ```sh
 # ~/.zshrc など
@@ -62,7 +62,7 @@ export GEMINI_API_KEY="..."
 ```
 
 ```lua
--- macOS キーチェーンから読む例（初回呼び出し時に 1 回だけ実行される）
+-- macOS キーチェーンから読む例
 opts = {
   api_key = function()
     return vim.trim(vim.fn.system({ "security", "find-generic-password", "-s", "gemini-api-key", "-w" }))
@@ -172,7 +172,7 @@ require("ai-polish").setup({
   },
   default_pricing = { input_per_mtok = 1.50, output_per_mtok = 9.00 },
 
-  ui = { border = "rounded", max_width = 80 },
+  ui = { border = "rounded", max_width = 80, winblend = 0 }, -- winblend: ポップアップの透過度（0-100）
 
   -- ポップアップ内のキー。false で無効化
   keymaps = {

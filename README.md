@@ -54,7 +54,7 @@ The key is looked up in this order:
 2. `$GEMINI_API_KEY`
 3. `$GOOGLE_API_KEY`
 
-Do not hard-code the key in your config. Export it from your shell, or read it from a password manager with a function.
+Do not hard-code the key in your config. Export it from your shell, or read it from a password manager with a function. The function is called on first use and its result is cached until the next `setup()`; a failed or empty result is retried next time. An exported but empty variable counts as unset.
 
 ```sh
 # ~/.zshrc etc.
@@ -172,7 +172,7 @@ require("ai-polish").setup({
   },
   default_pricing = { input_per_mtok = 1.50, output_per_mtok = 9.00 },
 
-  ui = { border = "rounded", max_width = 80 },
+  ui = { border = "rounded", max_width = 80, winblend = 0 }, -- winblend: popup transparency (0-100)
 
   -- Keys inside the popup; false disables a key
   keymaps = {
