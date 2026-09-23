@@ -23,7 +23,7 @@ The quick brown fox jumsp over the lazy dog.
 
 - Neovim 0.11+
 - `curl`
-- A Gemini API key (create one in [Google AI Studio](https://aistudio.google.com/apikey))
+- A Gemini API key (see [Creating a Gemini API key](docs/api-key.md))
 
 No other plugin dependencies.
 

@@ -23,7 +23,7 @@ Gemini で文章を校正・推敲する Neovim プラグイン。
 
 - Neovim 0.11 以上
 - `curl`
-- Gemini API キー（[Google AI Studio](https://aistudio.google.com/apikey) で発行）
+- Gemini API キー（発行手順は [Gemini API キーの発行](docs/api-key.ja.md)）
 
 他のプラグインには依存しない。
 
