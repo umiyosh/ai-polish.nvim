@@ -2,6 +2,7 @@
 local config = require("ai-polish.config")
 local prompt = require("ai-polish.prompt")
 local http = require("ai-polish.http")
+local locale = require("ai-polish.locale")
 
 local M = {}
 
@@ -26,7 +27,11 @@ function M.build_body(text, ctx)
     systemInstruction = {
       parts = {
         {
-          text = prompt.system({ filetype = ctx.filetype, language = opts.language, instructions = opts.instructions }),
+          text = prompt.system({
+            filetype = ctx.filetype,
+            language = locale.language(),
+            instructions = opts.instructions,
+          }),
         },
       },
     },

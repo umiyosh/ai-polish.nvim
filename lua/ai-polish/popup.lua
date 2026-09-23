@@ -1,5 +1,6 @@
 -- Review popup: a focused floating window anchored to the current suggestion.
 local config = require("ai-polish.config")
+local locale = require("ai-polish.locale")
 
 local M = {}
 
@@ -42,7 +43,7 @@ function M.render_lines(session, width)
     end
   end
 
-  local head = ("%s · %s"):format(item.category, item.severity)
+  local head = ("%s · %s"):format(locale.label(item.category), locale.label(item.severity))
   local count = ("%d/%d"):format(session.index, #session.items)
   local pad = math.max(2, width - vim.fn.strdisplaywidth(head) - #count)
   add(head .. string.rep(" ", pad) .. count, "AiPolishTitle")

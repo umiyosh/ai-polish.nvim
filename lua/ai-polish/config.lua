@@ -18,8 +18,9 @@ M.defaults = {
   thinking_level = "low",
   temperature = nil,
   timeout_ms = 120000,
-  -- Language for the `reason` field. nil = same language as the text.
-  language = nil,
+  -- "en" | "ja" | "zh": language of the popup labels and of Gemini's explanations.
+  -- nil = detect from v:lang ($LANG), falling back to "en".
+  locale = nil,
   -- Extra instructions appended to the system prompt (style guide, terminology, ...).
   instructions = nil,
 
@@ -84,6 +85,10 @@ local function validate(opts)
   vim.validate("guard.max_chars", opts.guard.max_chars, "number")
   vim.validate("api_key", opts.api_key, { "string", "function" }, true)
   vim.validate("thinking_level", opts.thinking_level, "string", true)
+  vim.validate("locale", opts.locale, "string", true)
+  if opts.locale and not vim.tbl_contains(require("ai-polish.locale").supported, opts.locale) then
+    error(("ai-polish: locale must be one of en, ja, zh (got %q)"):format(opts.locale))
+  end
   if opts.chunk.max_chars < 500 then
     error("ai-polish: chunk.max_chars must be >= 500")
   end

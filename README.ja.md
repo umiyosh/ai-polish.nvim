@@ -130,6 +130,12 @@ end
 sections = { lualine_x = { function() return require("ai-polish").status() end } }
 ```
 
+### 表示言語
+
+ポップアップに出す分類・重要度の名前と、Gemini が書く指摘理由は `locale`（`en` / `ja` / `zh`。`zh` は簡体字中国語）に従う。
+`locale` を指定しなければ `v:lang` / `$LANG` から判定し、判定できなければ英語にする。
+修正案の文章は常に本文と同じ言語のままで、キー操作の案内は英語で表示する。
+
 ## 長い文書の扱い
 
 - 送信前にサイズとコストをローカルで概算する。見積もりのために API を呼ぶこと（countTokens など）はしないので、承認前に本文が外部へ出ることはない。
@@ -154,7 +160,7 @@ require("ai-polish").setup({
   thinking_level = "low",        -- "low" | "medium" | "high" | nil（モデル既定）
   temperature = nil,
   timeout_ms = 120000,
-  language = nil,                -- 指摘理由の言語。nil なら本文と同じ言語
+  locale = nil,                  -- "en" | "ja" | "zh"。nil なら v:lang から判定し、判定できなければ "en"
   instructions = nil,            -- 追加指示（表記ルール、用語集など）
 
   chunk = { max_chars = 6000, concurrency = 2 },
@@ -187,7 +193,7 @@ require("ai-polish").setup({
 ```lua
 require("ai-polish").setup({
   model = "gemini-3.5-flash-lite", -- 安価なモデルに切り替える
-  language = "日本語",
+  locale = "ja",
   instructions = [[
 - 「行う」「おこなう」は「行う」に統一する
 - 英単語と日本語の間に半角スペースを入れない

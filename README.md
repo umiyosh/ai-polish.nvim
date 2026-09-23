@@ -130,6 +130,10 @@ For a statusline, use `require("ai-polish").status()`. It returns `""` when idle
 sections = { lualine_x = { function() return require("ai-polish").status() end } }
 ```
 
+### Language
+
+The popup's category and severity labels, and the explanation Gemini writes for each suggestion, follow `locale`: `en`, `ja`, or `zh` (Simplified Chinese). When `locale` is unset, it is detected from `v:lang` / `$LANG`, falling back to English. The replacement text itself always stays in the language of your document, and the key hints stay in English.
+
 ## Large documents
 
 - Size and cost are estimated locally before anything is sent. No API call (such as countTokens) is made for the estimate, so no text leaves your machine before you approve.
@@ -154,7 +158,7 @@ require("ai-polish").setup({
   thinking_level = "low",        -- "low" | "medium" | "high" | nil (model default)
   temperature = nil,
   timeout_ms = 120000,
-  language = nil,                -- language of the explanations; nil = same as the text
+  locale = nil,                  -- "en" | "ja" | "zh"; nil = detect from v:lang, else "en"
   instructions = nil,            -- extra instructions (style guide, terminology, ...)
 
   chunk = { max_chars = 6000, concurrency = 2 },
@@ -187,7 +191,7 @@ Example:
 ```lua
 require("ai-polish").setup({
   model = "gemini-3.5-flash-lite", -- a cheaper model
-  language = "English",
+  locale = "en",
   instructions = [[
 - Use American spelling.
 - Keep product names as written.

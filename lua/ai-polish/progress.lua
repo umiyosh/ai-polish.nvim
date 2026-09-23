@@ -12,10 +12,13 @@ function M.start(bufnr, row)
   local frames = config.options.ui.spinner
   local frame, label = 1, ""
   local mark
+  local stopped = false
   local timer = assert(vim.uv.new_timer())
 
   local function draw()
-    if not vim.api.nvim_buf_is_valid(bufnr) then
+    -- A tick queued by vim.schedule_wrap can run after stop(); drawing then would
+    -- re-create the deleted mark and leave the spinner behind.
+    if stopped or not vim.api.nvim_buf_is_valid(bufnr) then
       return
     end
     local r = mark and vim.api.nvim_buf_get_extmark_by_id(bufnr, ns, mark, {})[1] or row
@@ -42,6 +45,7 @@ function M.start(bufnr, row)
     pcall(draw)
   end
   function handle.stop()
+    stopped = true
     if not timer:is_closing() then
       timer:stop()
       timer:close()

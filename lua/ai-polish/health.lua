@@ -21,6 +21,14 @@ function M.check()
     h.error(err)
   end
   h.info("model: " .. config.options.model)
+  local loc = require("ai-polish.locale").current()
+  h.info(
+    ("locale: %s (%s)%s"):format(
+      loc,
+      require("ai-polish.locale").language(loc),
+      config.options.locale and "" or ", detected from v:lang"
+    )
+  )
 end
 
 return M
