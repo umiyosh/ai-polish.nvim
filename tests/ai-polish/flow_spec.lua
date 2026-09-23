@@ -77,6 +77,21 @@ describe("proofreading flow", function()
     return messages[#messages] and messages[#messages].msg or ""
   end
 
+  -- ERROR-level notifications are deferred with vim.schedule.
+  local function wait_message(pattern)
+    local found
+    vim.wait(1000, function()
+      for _, m in ipairs(messages) do
+        if m.msg:match(pattern) then
+          found = m
+          return true
+        end
+      end
+      return false
+    end)
+    return found or { msg = last_message() }
+  end
+
   it("proofreads the buffer, opens the popup and applies accepted edits", function()
     local b = open_buffer({ "今日わ良い天気です。", "明日わ雨です。" })
     reply = function()
@@ -126,8 +141,9 @@ describe("proofreading flow", function()
     end
     vim.cmd("AiPolish")
     wait_idle()
-    assert.matches("HTTP 401", last_message())
-    assert.equals(vim.log.levels.ERROR, messages[#messages].level)
+    local m = wait_message("HTTP 401")
+    assert.matches("HTTP 401", m.msg)
+    assert.equals(vim.log.levels.ERROR, m.level)
   end)
 
   it("asks before sending large text and sends nothing when declined", function()
@@ -171,7 +187,21 @@ describe("proofreading flow", function()
     open_buffer({ string.rep("x", 50) })
     vim.cmd("AiPolish")
     assert.equals(0, #requests)
-    assert.matches("too large", last_message())
+    assert.matches("too large", wait_message("too large").msg)
+  end)
+
+  -- lazy.nvim loads the plugin on the first :AiPolish and runs it through vim.cmd();
+  -- an ERROR notification must not turn into an exception there.
+  it("does not raise when invoked through vim.cmd without an API key", function()
+    local gemini_env, google_env = vim.env.GEMINI_API_KEY, vim.env.GOOGLE_API_KEY
+    vim.env.GEMINI_API_KEY, vim.env.GOOGLE_API_KEY = nil, nil
+    polish.setup({})
+    open_buffer({ "text" })
+    vim.notify = orig_notify -- the real one is what turns ERROR into an exception
+    local ok, err = pcall(vim.cmd, "AiPolish")
+    vim.env.GEMINI_API_KEY, vim.env.GOOGLE_API_KEY = gemini_env, google_env
+    assert.is_true(ok, err)
+    assert.equals(0, #requests)
   end)
 
   it("cancels an in-flight request", function()

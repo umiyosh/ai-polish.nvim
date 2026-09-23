@@ -62,6 +62,31 @@ function M.render_lines(session, width)
   return lines, hls, rows
 end
 
+---Where to put a popup of `total_height` screen rows for the suggestion at (row, col).
+---It goes below the last screen row of the (possibly wrapped) line so the rest of the
+---sentence stays visible, or above the line's first screen row when there is no room.
+---Offsets are relative to the screen row of `bufpos`. Exposed for tests.
+---@return { row: integer, anchor: "NW"|"SW" }
+function M._placement(win, row, col, total_height)
+  local buf = vim.api.nvim_win_get_buf(win)
+  local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1] or ""
+  local pos = vim.fn.screenpos(win, row + 1, col + 1).row
+  -- screenpos() returns 0 for positions outside the window; fall back to the suggestion row.
+  local first = vim.fn.screenpos(win, row + 1, 1).row
+  local last = vim.fn.screenpos(win, row + 1, math.max(#line, 1)).row
+  first = first > 0 and first or pos
+  last = last > 0 and last or pos
+
+  local top = vim.fn.win_screenpos(win)[1]
+  local bottom = top + vim.api.nvim_win_get_height(win) - 1
+  local below = bottom - last
+  local above = first - top
+  if below >= total_height or below >= above then
+    return { row = last - pos + 1, anchor = "NW" }
+  end
+  return { row = first - pos, anchor = "SW" }
+end
+
 function M.is_open()
   return state ~= nil and vim.api.nvim_win_is_valid(state.win)
 end
@@ -215,18 +240,14 @@ open = function(session, source_win)
     height = height + math.max(1, math.ceil(vim.fn.strdisplaywidth(l) / width))
   end
 
-  -- Open below the suggestion, or above when there is no room.
-  local screen_row = vim.fn.screenpos(source_win, row + 1, col + 1).row
-  local win_top = vim.fn.win_screenpos(source_win)[1]
-  local below = vim.api.nvim_win_get_height(source_win) - (screen_row - win_top + 1)
-  local fits_below = below >= height + 2
+  local place = M._placement(source_win, row, col, height + 2)
   local win_cfg = {
     relative = "win",
     win = source_win,
     bufpos = { row, col },
-    row = fits_below and 1 or 0,
+    row = place.row,
     col = 0,
-    anchor = fits_below and "NW" or "SW",
+    anchor = place.anchor,
     width = width,
     height = height,
     style = "minimal",
@@ -245,6 +266,8 @@ open = function(session, source_win)
     vim.wo[win].wrap = true
     vim.wo[win].cursorline = true
     vim.wo[win].winhighlight = "NormalFloat:AiPolishNormal,FloatBorder:AiPolishBorder"
+    -- A global 'winblend' would let the text underneath bleed through the suggestion.
+    vim.wo[win].winblend = opts.winblend
     set_keymaps(buf)
     vim.api.nvim_create_autocmd("WinLeave", {
       buffer = buf,

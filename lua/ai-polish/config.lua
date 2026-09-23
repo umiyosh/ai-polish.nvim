@@ -1,5 +1,9 @@
 local M = {}
 
+-- Result of an `api_key` function. Cached because it may be slow or interactive
+-- (password managers); only a successful result is kept so a failure can be retried.
+local cached_key
+
 ---@class AiPolishPricing
 ---@field input_per_mtok number  USD per 1M input tokens
 ---@field output_per_mtok number USD per 1M output tokens
@@ -49,6 +53,8 @@ M.defaults = {
   ui = {
     border = "rounded",
     max_width = 80,
+    -- Transparency of the popup (0-100). 0 keeps it readable regardless of the global 'winblend'.
+    winblend = 0,
     spinner = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" },
   },
 
@@ -91,6 +97,7 @@ function M.setup(opts)
   local merged = vim.tbl_deep_extend("force", vim.deepcopy(M.defaults), opts or {})
   validate(merged)
   M.options = merged
+  cached_key = nil
   return merged
 end
 
@@ -99,21 +106,33 @@ function M.pricing(model)
   return M.options.pricing[model] or M.options.default_pricing
 end
 
+local function nonempty(v)
+  if type(v) == "string" and vim.trim(v) ~= "" then
+    return vim.trim(v)
+  end
+end
+
 ---@return string|nil key, string|nil err
 function M.api_key()
   local key = M.options.api_key
   if type(key) == "function" then
-    local ok, res = pcall(key)
-    if not ok then
-      return nil, "api_key function failed: " .. tostring(res)
+    if not cached_key then
+      local ok, res = pcall(key)
+      if not ok then
+        return nil, "api_key function failed: " .. tostring(res)
+      end
+      cached_key = nonempty(res)
     end
-    key = res
+    key = cached_key
+  else
+    key = nonempty(key)
   end
-  key = key or vim.env.GEMINI_API_KEY or vim.env.GOOGLE_API_KEY
-  if type(key) ~= "string" or vim.trim(key) == "" then
+  -- An exported-but-empty variable counts as unset.
+  key = key or nonempty(vim.env.GEMINI_API_KEY) or nonempty(vim.env.GOOGLE_API_KEY)
+  if not key then
     return nil, "Gemini API key is not set (set $GEMINI_API_KEY or `api_key` in setup())"
   end
-  return vim.trim(key)
+  return key
 end
 
 return M
