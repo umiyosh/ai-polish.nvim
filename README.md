@@ -7,11 +7,21 @@
 
 English | [日本語](README.ja.md)
 
-Proofread and polish prose in Neovim with Gemini.
+**Write in Neovim. Let Gemini review. You decide what changes.**
 
-Send the visual selection or the whole buffer to Gemini, see the suggested fixes as underlines in the buffer plus a floating window, and accept or reject them one by one from the keyboard. No main window, no extra UI.
+Run `:AiPolish` on a visual selection or the whole buffer. Gemini's findings show up as underlines in the text, and a floating window walks you through them one at a time: the original span, up to three replacements, and the reason. Your text changes only when you accept a suggestion.
 
 ![Demo: proofreading a buffer and accepting suggestions in the AI Polish popup](docs/images/demo-en.gif)
+
+## Why ai-polish.nvim?
+
+Many AI writing tools rewrite the selection and leave you to compare the new text with the old. ai-polish.nvim uses the model as a reviewer instead.
+
+- **Small, separate fixes.** Gemini is asked for the minimal span to change, one fix per suggestion, never a rewritten paragraph. Each fix can be judged in a moment.
+- **You apply every change.** `a` accepts, `x` rejects, `]` / `[` move between suggestions. Each accept is one undo step.
+- **Safe to keep editing.** Suggestions are anchored in the buffer and re-checked against the current text before they are applied ([Design notes](#design-notes)).
+- **Stays in the buffer.** No chat panel or side window. The popup opens at the text in question.
+- **No surprise requests.** Size and cost are estimated locally, and large requests need your confirmation ([Large documents](#large-documents)).
 
 ## Requirements
 
@@ -104,7 +114,7 @@ The popup takes focus. These keys work only inside it:
 | `X` | Reject all remaining suggestions |
 | `q` / `<Esc>` | Close. Suggestions stay; resume with `:AiPolish review` |
 
-Each accept is its own undo step. You can keep editing while suggestions are pending. Suggestions are tracked with extmarks, and each one is checked against the current text before it is applied, so a suggestion whose text you changed is dropped rather than misapplied.
+You can keep editing while suggestions are pending. A suggestion whose text you changed is dropped rather than misapplied.
 
 ### States
 
