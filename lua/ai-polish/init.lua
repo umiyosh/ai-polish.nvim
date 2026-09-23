@@ -13,7 +13,17 @@ local region_ns = vim.api.nvim_create_namespace("ai-polish-region")
 local jobs = {}
 
 local function notify(msg, level)
-  vim.notify("ai-polish: " .. msg, level or vim.log.levels.INFO)
+  level = level or vim.log.levels.INFO
+  msg = "ai-polish: " .. msg
+  if level >= vim.log.levels.ERROR then
+    -- The default vim.notify reports ERROR via nvim_err_writeln, which inside vim.cmd()
+    -- (e.g. lazy.nvim's `cmd` loader running :AiPolish) turns into an exception with a
+    -- traceback. Deferring it shows a plain error message instead.
+    return vim.schedule(function()
+      vim.notify(msg, level)
+    end)
+  end
+  vim.notify(msg, level)
 end
 
 local function set_highlights()
