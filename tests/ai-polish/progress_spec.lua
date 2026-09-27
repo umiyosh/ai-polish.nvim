@@ -80,7 +80,9 @@ describe("progress", function()
     config.setup({ ui = { border = "none", winblend = 25 } })
     start()
     local win = floats()[1]
-    assert.is_nil(vim.api.nvim_win_get_config(win).border)
+    -- 0.11 omits a disabled border; newer versions return "none".
+    local border = vim.api.nvim_win_get_config(win).border
+    assert.is_true(border == nil or border == "none")
     assert.equals(25, vim.wo[win].winblend)
   end)
 
