@@ -120,7 +120,7 @@ You can keep editing while suggestions are pending. A suggestion whose text you 
 
 | State | What you see |
 | --- | --- |
-| In progress | A spinner at the end of the target's first line (`⠋ AI Polish: proofreading 2/5…`) |
+| In progress | A non-focusable floating spinner in the editor's bottom-right corner (`⠋ AI Polish: proofreading 2/5…`), independent of scrolling and buffer decorations |
 | Done | A notification with the count, then the popup. If the popup cannot open (for example, you are in insert mode), you are told to run `:AiPolish review` |
 | Nothing found | `no issues found` |
 | Error | `vim.notify` at ERROR level with the HTTP status, the API error message, or the safety block reason |
