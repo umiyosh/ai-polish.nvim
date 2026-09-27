@@ -50,6 +50,31 @@ No other plugin dependencies.
 
 Calling `setup()` is optional; the plugin works with the defaults.
 
+### Versions and updates
+
+Releases use Git tags in the form `vMAJOR.MINOR.PATCH`. Published versions and release notes are listed on [GitHub Releases](https://github.com/umiyosh/ai-polish.nvim/releases).
+The first planned release is **v0.1.0**. Until its tag is published, use the installation example above, which follows the default branch unless you configured a global version constraint in lazy.nvim.
+
+After v0.1.0 is published, add **one** of these fields to the lazy.nvim specification above:
+
+| Setting | Update behavior |
+| --- | --- |
+| `version = "^0.1.0"` | Recommended: receive 0.1.x releases, without moving to 0.2.0 |
+| `tag = "v0.1.0"` | Stay on exactly v0.1.0 |
+| `version = "*"` | Receive the latest release, including new minor/major versions; excludes prerelease tags |
+| `branch = "master", version = false` | Follow development commits instead of releases |
+
+Run `:Lazy update ai-polish.nvim` to update within the selected constraint. Commit your `lazy-lock.json` to reproduce installed revisions; `:Lazy restore` restores them. See lazy.nvim's [versioning](https://lazy.folke.io/spec/versioning) and [lockfile](https://lazy.folke.io/usage/lockfile) documentation.
+
+With [vim-plug](https://github.com/junegunn/vim-plug), use an exact tag in your existing `plug#begin()` / `plug#end()` block after the release is published:
+
+```vim
+Plug 'umiyosh/ai-polish.nvim', { 'tag': 'v0.1.0' }
+```
+
+This plugin requires **Neovim 0.11+**, including when installed with vim-plug; Vim itself is not supported.
+While the project is below 1.0, patch releases preserve compatibility within a minor series; a new minor series may include breaking changes. Review its release notes before updating. Maintainers: see [Releasing](docs/releasing.md).
+
 ## Setting the API key
 
 The key is looked up in this order:
