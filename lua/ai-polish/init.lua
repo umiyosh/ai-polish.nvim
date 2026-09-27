@@ -247,7 +247,7 @@ function M.proofread(opts)
       end_right_gravity = true,
     }),
   }
-  local spinner = progress.start(bufnr, r[1])
+  local spinner = progress.start(bufnr)
   local function label(done, total)
     return total > 1 and ("proofreading %d/%d…"):format(done, total) or "proofreading…"
   end

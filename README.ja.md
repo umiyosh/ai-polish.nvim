@@ -49,6 +49,31 @@ ai-polish.nvim は Gemini をレビュアーとして使います。文章をま
 
 `setup()` は省略でき、呼ばなければデフォルト設定で動きます。
 
+### バージョンの指定と更新
+
+リリースには `vMAJOR.MINOR.PATCH` 形式の Git タグを付けます。公開済みのバージョンと変更内容は [GitHub Releases](https://github.com/umiyosh/ai-polish.nvim/releases) に掲載します。
+初回は **v0.1.0** を予定しています。タグが公開されるまでは上のインストール例を使ってください。lazy.nvim 全体のバージョン制約を設定していなければ、デフォルトブランチを追従します。
+
+v0.1.0 公開後は、上の lazy.nvim 設定に次のうち **1 つ**を追加できます。
+
+| 設定 | 更新時の動作 |
+| --- | --- |
+| `version = "^0.1.0"` | おすすめ。0.1.x のリリースへ更新し、0.2.0 には進みません |
+| `tag = "v0.1.0"` | v0.1.0 に固定します |
+| `version = "*"` | 最新リリースへ更新します。minor・major の変更も含み、プレリリースのタグは除外します |
+| `branch = "master", version = false` | リリースではなく開発中のコミットを追従します |
+
+`:Lazy update ai-polish.nvim` で、指定範囲内のバージョンへ更新できます。`lazy-lock.json` をバージョン管理すると導入したコミットを再現でき、`:Lazy restore` で復元できます。詳細は lazy.nvim の [バージョン指定](https://lazy.folke.io/spec/versioning)・[lockfile](https://lazy.folke.io/usage/lockfile) の説明を参照してください。
+
+[vim-plug](https://github.com/junegunn/vim-plug) では、リリース公開後に既存の `plug#begin()` / `plug#end()` 内でタグを指定できます。
+
+```vim
+Plug 'umiyosh/ai-polish.nvim', { 'tag': 'v0.1.0' }
+```
+
+vim-plug を使う場合も **Neovim 0.11 以上**が必要です。Vim 本体には対応していません。
+1.0 未満の間は、同じ minor 系列の patch 更新では互換性を保ち、新しい minor 系列では互換性のない変更を含む場合があります。更新前にリリースノートを確認してください。メンテナー向けの公開手順は [Releasing](docs/releasing.md) に記載しています。
+
 ## API キーの設定
 
 キーは次の順に探します。
@@ -119,7 +144,7 @@ curl が入っているか、キーが設定されているかは `:checkhealth 
 
 | 状態 | 表示 |
 | --- | --- |
-| 処理中 | 対象範囲の先頭行の末尾にスピナー（`⠋ AI Polish: proofreading 2/5…`） |
+| 処理中 | エディター右下のフローティングウィンドウにスピナー（`⠋ AI Polish: proofreading 2/5…`）を表示します。スクロールや本文の装飾に影響されず、入力フォーカスも奪いません |
 | 完了 | 件数を通知してポップアップを開きます。挿入モード中などで開けないときは `:AiPolish review` を案内します |
 | 指摘なし | `no issues found` を通知 |
 | エラー | HTTP ステータス、API のエラー文、安全性ブロックの理由を `vim.notify` の ERROR で表示 |
