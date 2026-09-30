@@ -60,7 +60,9 @@ function M.post(req, cb)
       res = { status = tonumber(code) or 0, body = body or stdout }
     end
     vim.schedule(function()
-      cb(res)
+      if not cancelled then
+        cb(res)
+      end
     end)
   end)
 
@@ -75,6 +77,7 @@ function M.post(req, cb)
   return {
     cancel = function()
       cancelled = true
+      os.remove(header_file)
       pcall(function()
         proc:kill("sigterm")
       end)

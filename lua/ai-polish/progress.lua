@@ -61,10 +61,12 @@ function M.start(bufnr)
     local text = " " .. frames[frame] .. " AI Polish: " .. label .. " "
     -- Reserve space for the border, command line and statusline. Recompute on
     -- each tick so resizing never leaves the indicator outside the editor.
+    local panel = package.loaded["ai-polish.evaluation_panel"]
+    local reserved = panel and panel.reserved_height(tab) or 0
     local cfg = {
       relative = "editor",
       anchor = "SE",
-      row = math.max(3, vim.o.lines - vim.o.cmdheight - 2 - slot * 3),
+      row = math.max(3, vim.o.lines - vim.o.cmdheight - 2 - slot * 3 - reserved),
       col = math.max(1, vim.o.columns - 1),
       width = math.max(1, math.min(vim.fn.strdisplaywidth(text), vim.o.columns - 4)),
       height = 1,

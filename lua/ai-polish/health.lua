@@ -20,6 +20,14 @@ function M.check()
   else
     h.error(err)
   end
+  local evaluation_key, evaluation_err = config.evaluation_key()
+  if evaluation_key then
+    h.ok("Optional Jev key configured (manual evaluation only)")
+  elseif evaluation_err == "missing_key" or evaluation_err == "disabled" then
+    h.info("Optional Jev evaluation unavailable; no evaluation UI is shown")
+  else
+    h.warn("Could not read the optional Jev key; check its callback locally")
+  end
   h.info("model: " .. config.options.model)
   local loc = require("ai-polish.locale").current()
   h.info(

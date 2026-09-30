@@ -48,6 +48,9 @@ end
 
 function M.setup(opts)
   config.setup(opts)
+  if package.loaded["ai-polish.evaluation"] then
+    require("ai-polish.evaluation").reset()
+  end
   set_highlights()
 end
 
@@ -310,10 +313,12 @@ function M.proofread_lines(bufnr, line1, line2)
 end
 
 function M.cancel(bufnr)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local evaluation = package.loaded["ai-polish.evaluation"]
+  bufnr = bufnr or (evaluation and evaluation.source()) or vim.api.nvim_get_current_buf()
+  local eval_cancelled = evaluation and evaluation.cancel(bufnr)
   local job = jobs[bufnr]
   if not job then
-    return notify("nothing to cancel")
+    return notify(eval_cancelled and "cancelled" or "nothing to cancel")
   end
   job.cancel()
   notify("cancelled")
@@ -331,7 +336,11 @@ function M.review(bufnr)
 end
 
 function M.clear(bufnr)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local evaluation = package.loaded["ai-polish.evaluation"]
+  bufnr = bufnr or (evaluation and evaluation.source()) or vim.api.nvim_get_current_buf()
+  if package.loaded["ai-polish.evaluation"] then
+    require("ai-polish.evaluation").clear(bufnr)
+  end
   popup.close()
   session.clear(bufnr)
 end

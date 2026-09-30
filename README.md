@@ -161,7 +161,53 @@ sections = { lualine_x = { function() return require("ai-polish").status() end }
 
 ### Language
 
-The popup's category and severity labels, and the explanation Gemini writes for each suggestion, follow `locale`: `en`, `ja`, or `zh` (Simplified Chinese). When `locale` is unset, it is detected from `v:lang` / `$LANG`, falling back to English. The replacement text itself always stays in the language of your document, and the key hints stay in English.
+The popup's category and severity labels, and the explanation Gemini writes for each suggestion, follow `locale`: `en`, `ja`, `zh-Hans` (Simplified Chinese), or `zh-Hant` (Traditional Chinese); `zh` remains a Simplified alias. When `locale` is unset, it is detected from `v:lang` / `$LANG`, falling back to English. The replacement text itself always stays in the language of your document, and the key hints stay in English.
+
+## Optional Jev text evaluation
+
+Before calling Gemini, use Jev to judge whether another proofreading pass is worthwhile. This is optional: without a Jev key, existing proofreading looks and works as before.
+
+Set `TYPESAFE_API_KEY` locally, or supply `evaluation.api_key` (a string or a function returning the key). Never commit the key. A callback is resolved only by an explicit Jev action or health check and successful values are cached until `setup()`.
+
+```lua
+-- Add to your existing lazy.nvim keys; these are examples, not default bindings.
+{ "<leader>ae", "<Plug>(ai-polish-evaluate)", mode = { "n", "x" }, desc = "Evaluate text" },
+{ "<leader>at", "<Plug>(ai-polish-evaluation-toggle)", mode = { "n", "x" }, desc = "Toggle evaluation" },
+-- Keep your existing <leader>ap proofreading bindings.
+```
+
+| Command | Behavior |
+| --- | --- |
+| `:AiPolish evaluate` | Evaluate the retained target, initially the whole buffer |
+| `:'<,'>AiPolish evaluate` / Visual evaluation Plug | Set and evaluate the exact selection; block selections are refused |
+| `:AiPolish evaluate buffer` | Explicitly switch back to the whole buffer |
+| `:AiPolish toggle` | Show/hide the panel for this tab; **no request** |
+| `:AiPolish polish` | Send the current retained target to Gemini |
+| `:AiPolish details` | Inspect cached criteria, distribution and confidence; `q`/Esc close, `j`/`k` scroll |
+| `:AiPolish cancel` / `clear` | Cancel pending evaluation; clear also removes its target and result |
+
+The non-focusable bottom-right panel defaults to 30 cells, with separate unnaturalness and AI-style rows. Filled cells mean stronger issues, not better writing. AI style describes mechanical or formulaic prose, **not the probability that AI wrote it**. Details keep model confidence separate from the five-level distribution.
+
+Only explicit evaluation sends text to [TypeSafe](https://docs.typesafe.ai/api), in one request containing both questions. Typing, pasting, saving, accepting/rejecting suggestions, switching buffers, and toggling the panel send **nothing** to Jev. Editing shows the previous result and an evaluation hint. A selection is tracked through edits; Normal-mode evaluation follows it instead of silently widening to the buffer. A deleted range must be selected again. Hiding the panel does not cancel a request or reopen it on completion.
+
+```lua
+evaluation = {
+  enabled = true,               -- false hides all Jev UI
+  api_key = nil,                -- optional; nil uses $TYPESAFE_API_KEY
+  model = "jev-latest",
+  timeout_ms = 20000,
+  max_chars = 12000,            -- Unicode characters; refuse rather than truncate
+  language = "auto",            -- source hint: auto/en/ja/zh-Hans/zh-Hant
+  panel_width = 30,             -- 30..60; 60 permits two axes on one row if they fit
+  uncertainty_threshold = 0.5,  -- display cue only; not calibrated accuracy
+},
+```
+
+The smaller of `evaluation.max_chars` and `guard.max_chars` applies. Above `guard.confirm_chars`, confirmation names TypeSafe as the destination. Jev is not chunked and **never automatically retried**, including 429/529; press evaluation again to retry. The 12,000-character cap is a conservative client limit, not a claim about the provider's maximum. Gemini's existing guards and retry policy remain separate.
+
+Theme groups: `AiPolishEvalLow` (DiagnosticOk), `AiPolishEvalMid` (DiagnosticWarn), `AiPolishEvalHigh` (bold warning color), `AiPolishEvalLabel`/`Stale` (NormalFloat), `AiPolishEvalError` (DiagnosticWarn). No added font dependency. Panels hide on unrelated special buffers or overlap with the correction popup, and Gemini progress stacks above them.
+
+See [design and validation](docs/jev.md). Try the offline UI with `nvim -u scripts/jev-demo.lua`; its values are fixtures, not model judgments. Personal key mappings and installed plugin revisions are never changed by `setup()`.
 
 ## Large documents
 
@@ -187,7 +233,7 @@ require("ai-polish").setup({
   thinking_level = "low",        -- "low" | "medium" | "high" | nil (model default)
   temperature = nil,
   timeout_ms = 120000,
-  locale = nil,                  -- "en" | "ja" | "zh"; nil = detect from v:lang, else "en"
+  locale = nil,                  -- "en" | "ja" | "zh" | "zh-Hans" | "zh-Hant"; nil = detect from v:lang, else "en"
   instructions = nil,            -- extra instructions (style guide, terminology, ...)
 
   chunk = { max_chars = 6000, concurrency = 2 },

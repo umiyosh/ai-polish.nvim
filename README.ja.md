@@ -160,7 +160,7 @@ sections = { lualine_x = { function() return require("ai-polish").status() end }
 
 ### 表示言語
 
-ポップアップに出る分類・重要度の名前と、Gemini が書く指摘理由の言語は `locale`（`en` / `ja` / `zh`。`zh` は簡体字中国語）で決まります。
+ポップアップに出る分類・重要度の名前と、Gemini が書く指摘理由の言語は `locale`（`en` / `ja` / `zh-Hans` / `zh-Hant`。`zh` は簡体字の別名）で決まります。
 `locale` を指定しなければ `v:lang` / `$LANG` から判定し、判定できないときは英語になります。
 修正案そのものは常に本文と同じ言語です。キー操作の案内だけは英語で表示されます。
 
@@ -176,6 +176,52 @@ sections = { lualine_x = { function() return require("ai-polish").status() end }
 
 トークン数は ASCII なら 4 文字で約 1 トークン、日本語などそれ以外は 1 文字で約 1 トークンとして数えます。出力側は、入力の 6 割に固定のオーバーヘッドを足して見積もります。どちらも多めに出る目安で、実際の請求額とは一致しません。単価は `pricing` で上書きできます。
 
+## Jevによる文章評価（任意）
+
+Geminiで校正する前に、Jevで「もう一度校正にかける価値があるか」を確認できます。Jevキーを設定しなければ、評価パネルや設定催促は出ず、従来のGemini校正だけを使えます。
+
+キーはローカルの環境変数 `TYPESAFE_API_KEY`、または `evaluation.api_key`（文字列／キーを返す関数）で設定してください。設定ファイルにキーを直接書いてコミットしないでください。関数は明示的なJev操作かhealth確認のときに呼び、取得できた値だけを次の `setup()` まで保持します。
+
+```lua
+-- 既存の lazy.nvim の keys に追加する例です。既定のキー割り当てではありません。
+{ "<leader>ae", "<Plug>(ai-polish-evaluate)", mode = { "n", "x" }, desc = "文章評価" },
+{ "<leader>at", "<Plug>(ai-polish-evaluation-toggle)", mode = { "n", "x" }, desc = "評価パネルの表示切替" },
+-- 既存の <leader>ap などの校正キーはそのまま使います。
+```
+
+| 操作 | 動作 |
+| --- | --- |
+| `:AiPolish evaluate` | 前回の対象を評価。対象がない初回だけ全文 |
+| Visualモードの評価キー／`:'<,'>AiPolish evaluate` | 選んだ範囲を評価。矩形選択は送信せず案内 |
+| `:AiPolish evaluate buffer` | 対象を明示的に全文へ戻す |
+| `:AiPolish toggle` | タブごとにパネルを表示／非表示。通信なし |
+| `:AiPolish polish` | 保持している範囲の現在の文章をGeminiで校正 |
+| `:AiPolish details` | 基準文・確率分布・確かさの詳細。通信なし。q/Escで閉じ、j/kでスクロール |
+| `:AiPolish cancel`／`clear` | 実行中の評価を中止。clearは対象と結果も消去 |
+
+右下の30セル幅のパネルに、不自然さとAIらしさを2段で表示します。バーが多いほど問題が強いという意味です。AIらしさは機械的・定型的な文体の目安で、AIが書いた確率ではありません。確かさも、正しさの保証ではありません。
+
+**Jevへの送信は評価操作をしたときだけです。** 入力・貼り付け・保存・校正候補の採用／却下・表示切替では通信しません。本文が変わると「前回」と再評価の操作を表示します。選択した範囲は修正後も追跡し、通常モードの評価キーでも同じ範囲を評価します。範囲が消えた場合は、全文へ広げず選び直しを案内します。
+
+```lua
+evaluation = {
+  enabled = true,               -- falseならJevのUIを非表示
+  api_key = nil,                -- nilなら $TYPESAFE_API_KEY
+  model = "jev-latest",
+  timeout_ms = 20000,
+  max_chars = 12000,            -- Unicode文字数。超過時は送信しない
+  language = "auto",            -- 本文の言語ヒント: auto/en/ja/zh-Hans/zh-Hant
+  panel_width = 30,             -- 30〜60。60なら収まる場合に横並び
+  uncertainty_threshold = 0.5,  -- 「判定に迷い」の表示基準。精度の保証値ではない
+},
+```
+
+対象文章は[TypeSafeのAPI](https://docs.typesafe.ai/api)に送られ、2つの評価を1回で取得します。上限は `evaluation.max_chars` と `guard.max_chars` の小さい方です。`guard.confirm_chars` を超える場合はTypeSafeへの送信確認を出します。分割・切り詰め・自動再試行は行いません。12,000文字はクライアント側の制限で、提供元の最大値を示すものではありません。混雑時も再評価は手動です。Geminiの既存の制限・再試行はそのままです。
+
+API未設定と認証エラーは区別します。パネルを隠しても送信済みの処理は継続しますが、応答で勝手に開きません。校正ポップアップと重なるときは一時的に隠し、Geminiの進捗表示は上に配置します。前回値も文字を薄くせず表示します。
+
+[設計・検証記録](docs/jev.md)も参照できます。`nvim -u scripts/jev-demo.lua` で通信なしのUIデモを開けます。デモの値は表示例です。個人のキー割り当てやインストール済みプラグインを自動変更しません。
+
 ## 設定
 
 既定値は次のとおりです。
@@ -188,7 +234,7 @@ require("ai-polish").setup({
   thinking_level = "low",        -- "low" | "medium" | "high" | nil（モデル既定）
   temperature = nil,
   timeout_ms = 120000,
-  locale = nil,                  -- "en" | "ja" | "zh"。nil なら v:lang から判定し、判定できなければ "en"
+  locale = nil,                  -- "en" | "ja" | "zh" | "zh-Hans" | "zh-Hant"。nil なら v:lang から判定し、判定できなければ "en"
   instructions = nil,            -- 追加指示（表記ルール、用語集など）
 
   chunk = { max_chars = 6000, concurrency = 2 },

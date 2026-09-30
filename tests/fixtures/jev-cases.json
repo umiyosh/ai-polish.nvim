@@ -1,0 +1,212 @@
+[
+  {
+    "id": "ja-1",
+    "language": "ja",
+    "kind": "normal",
+    "text": "本日の会議は午後三時からです。",
+    "split": "development"
+  },
+  {
+    "id": "ja-2",
+    "language": "ja",
+    "kind": "typo",
+    "text": "担当者に連絡絡してください。",
+    "split": "development"
+  },
+  {
+    "id": "ja-3",
+    "language": "ja",
+    "kind": "grammar",
+    "text": "私は昨日、資料を確認したいます。",
+    "split": "development"
+  },
+  {
+    "id": "ja-4",
+    "language": "ja",
+    "kind": "technical",
+    "text": "UTF-8のJSONをPOSTで送信する。",
+    "split": "development"
+  },
+  {
+    "id": "ja-5",
+    "language": "ja",
+    "kind": "notes",
+    "text": "明日: 資料確認、見積もり、返信。",
+    "split": "development"
+  },
+  {
+    "id": "ja-6",
+    "language": "ja",
+    "kind": "formulaic",
+    "text": "革新的な未来を切り拓く画期的な取り組みです。包括的な視点で本質的な価値を最大化します。",
+    "split": "development"
+  },
+  {
+    "id": "ja-7",
+    "language": "ja",
+    "kind": "holdout-normal",
+    "text": "変更を保存してから画面を閉じます。",
+    "split": "holdout"
+  },
+  {
+    "id": "ja-8",
+    "language": "ja",
+    "kind": "holdout-error",
+    "text": "変更を保村してから画面を閉じます。",
+    "split": "holdout"
+  },
+  {
+    "id": "ja-9",
+    "language": "ja",
+    "kind": "holdout-normal",
+    "text": "見積書を添付しました。ご確認ください。",
+    "split": "holdout"
+  },
+  {
+    "id": "ja-10",
+    "language": "ja",
+    "kind": "holdout-error",
+    "text": "見積書を添付しました。ご確認くだださい。",
+    "split": "holdout"
+  },
+  {
+    "id": "zh-Hans-1",
+    "language": "zh-Hans",
+    "kind": "normal",
+    "text": "会议改到周五下午三点。",
+    "split": "development"
+  },
+  {
+    "id": "zh-Hans-2",
+    "language": "zh-Hans",
+    "kind": "typo",
+    "text": "请把文件件发给同事。",
+    "split": "development"
+  },
+  {
+    "id": "zh-Hans-3",
+    "language": "zh-Hans",
+    "kind": "grammar",
+    "text": "他昨天已经完成报告明天了。",
+    "split": "development"
+  },
+  {
+    "id": "zh-Hans-4",
+    "language": "zh-Hans",
+    "kind": "technical",
+    "text": "通过HTTP请求发送UTF-8编码的JSON。",
+    "split": "development"
+  },
+  {
+    "id": "zh-Hans-5",
+    "language": "zh-Hans",
+    "kind": "notes",
+    "text": "明天：核对报价、回复邮件、整理资料。",
+    "split": "development"
+  },
+  {
+    "id": "zh-Hans-6",
+    "language": "zh-Hans",
+    "kind": "formulaic",
+    "text": "这是划时代的创新举措。我们将以全面的视角赋能未来，打造卓越生态，实现价值的全面跃升。",
+    "split": "development"
+  },
+  {
+    "id": "zh-Hans-7",
+    "language": "zh-Hans",
+    "kind": "holdout-normal",
+    "text": "请先保存文件，再关闭窗口。",
+    "split": "holdout"
+  },
+  {
+    "id": "zh-Hans-8",
+    "language": "zh-Hans",
+    "kind": "holdout-error",
+    "text": "请先保村文件，再关闭窗口。",
+    "split": "holdout"
+  },
+  {
+    "id": "zh-Hans-9",
+    "language": "zh-Hans",
+    "kind": "holdout-normal",
+    "text": "收到后请回复这封邮件。",
+    "split": "holdout"
+  },
+  {
+    "id": "zh-Hans-10",
+    "language": "zh-Hans",
+    "kind": "holdout-error",
+    "text": "收到后请回复复这封邮件。",
+    "split": "holdout"
+  },
+  {
+    "id": "zh-Hant-1",
+    "language": "zh-Hant",
+    "kind": "normal",
+    "text": "會議改到週五下午三點。",
+    "split": "development"
+  },
+  {
+    "id": "zh-Hant-2",
+    "language": "zh-Hant",
+    "kind": "typo",
+    "text": "請把檔案案寄給同事。",
+    "split": "development"
+  },
+  {
+    "id": "zh-Hant-3",
+    "language": "zh-Hant",
+    "kind": "grammar",
+    "text": "他昨天已經完成報告明天了。",
+    "split": "development"
+  },
+  {
+    "id": "zh-Hant-4",
+    "language": "zh-Hant",
+    "kind": "technical",
+    "text": "透過HTTP請求傳送UTF-8編碼的JSON。",
+    "split": "development"
+  },
+  {
+    "id": "zh-Hant-5",
+    "language": "zh-Hant",
+    "kind": "notes",
+    "text": "明天：核對報價、回覆郵件、整理資料。",
+    "split": "development"
+  },
+  {
+    "id": "zh-Hant-6",
+    "language": "zh-Hant",
+    "kind": "formulaic",
+    "text": "這是劃時代的創新舉措。我們將以全面視角賦能未來，打造卓越生態，實現價值的全面躍升。",
+    "split": "development"
+  },
+  {
+    "id": "zh-Hant-7",
+    "language": "zh-Hant",
+    "kind": "holdout-normal",
+    "text": "請先儲存檔案，再關閉視窗。",
+    "split": "holdout"
+  },
+  {
+    "id": "zh-Hant-8",
+    "language": "zh-Hant",
+    "kind": "holdout-error",
+    "text": "請先儲村檔案，再關閉視窗。",
+    "split": "holdout"
+  },
+  {
+    "id": "zh-Hant-9",
+    "language": "zh-Hant",
+    "kind": "holdout-normal",
+    "text": "收到後請回覆這封郵件。",
+    "split": "holdout"
+  },
+  {
+    "id": "zh-Hant-10",
+    "language": "zh-Hant",
+    "kind": "holdout-error",
+    "text": "收到後請回覆覆這封郵件。",
+    "split": "holdout"
+  }
+]
