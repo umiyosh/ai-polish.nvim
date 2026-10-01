@@ -1,4 +1,4 @@
--- Explicit evaluation and bounded proofreading/acceptance/InsertLeave hooks send requests.
+-- Explicit evaluation and bounded proofreading/acceptance/edit hooks send requests.
 -- Other observers only invalidate/render.
 local config = require("ai-polish.config")
 local target = require("ai-polish.evaluation_target")
@@ -6,6 +6,18 @@ local jev = require("ai-polish.jev")
 local copy = require("ai-polish.evaluation_copy")
 local M = { states = {}, views = {} }
 local attached, queued = {}, false
+local edit_timers = {}
+
+local function cancel_edit_timer(buf)
+  local timer = edit_timers[buf]
+  if timer then
+    timer:stop()
+    if not timer:is_closing() then
+      timer:close()
+    end
+    edit_timers[buf] = nil
+  end
+end
 
 local function panel()
   return require("ai-polish.evaluation_panel")
@@ -88,6 +100,7 @@ function M.cancel(buf)
 end
 
 function M.clear(buf)
+  cancel_edit_timer(buf)
   M.cancel(buf)
   M.states[buf] = nil
   target.clear(buf)
@@ -110,6 +123,7 @@ local function observe(buf)
   attached[buf] = true
   vim.api.nvim_buf_attach(buf, false, {
     on_lines = function()
+      cancel_edit_timer(buf)
       M.schedule()
     end,
     on_detach = function()
@@ -283,20 +297,46 @@ function M.details()
   panel().open_details(buf, win)
 end
 
+local function evaluate_edit(buf)
+  if M.source() ~= buf or not M.view().visible or not panel().is_open() then
+    return
+  end
+  local s = M.states[buf]
+  local range = s and target.range(buf, s.target)
+  if not range or not s.requested_text or target.read(buf, range) == s.requested_text then
+    return
+  end
+  -- Reuse the tracked target; never widen a selection or retry unchanged failures.
+  M.evaluate({ bufnr = buf, automatic = true })
+end
+
 local group = vim.api.nvim_create_augroup("AiPolishEvaluation", { clear = true })
 vim.api.nvim_create_autocmd("InsertLeave", {
   group = group,
   callback = function(ev)
-    if M.source() ~= ev.buf or not M.view().visible or not panel().is_open() then
+    cancel_edit_timer(ev.buf)
+    evaluate_edit(ev.buf)
+  end,
+})
+vim.api.nvim_create_autocmd("TextChanged", {
+  group = group,
+  callback = function(ev)
+    cancel_edit_timer(ev.buf)
+    if not M.states[ev.buf] or M.source() ~= ev.buf or not M.view().visible then
       return
     end
-    local s = M.states[ev.buf]
-    local range = s and target.range(ev.buf, s.target)
-    if not range or not s.requested_text or target.read(ev.buf, range) == s.requested_text then
-      return
-    end
-    -- Reuse the tracked target; never widen a selection or retry unchanged failures.
-    M.evaluate({ bufnr = ev.buf, automatic = true })
+    local tab = vim.api.nvim_get_current_tabpage()
+    local timer
+    timer = vim.defer_fn(function()
+      if edit_timers[ev.buf] ~= timer then
+        return
+      end
+      edit_timers[ev.buf] = nil
+      if vim.api.nvim_get_current_tabpage() == tab and vim.fn.mode() == "n" then
+        evaluate_edit(ev.buf)
+      end
+    end, 400)
+    edit_timers[ev.buf] = timer
   end,
 })
 vim.api.nvim_create_autocmd({
