@@ -88,6 +88,10 @@ function M._placement(win, row, col, total_height)
   return { row = first - pos, anchor = "SW" }
 end
 
+function M.context()
+  return M.is_open() and state or nil
+end
+
 function M.is_open()
   return state ~= nil and vim.api.nvim_win_is_valid(state.win)
 end

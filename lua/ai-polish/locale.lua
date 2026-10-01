@@ -1,13 +1,14 @@
 -- UI locale: labels shown in the popup and the language Gemini writes explanations in.
 local M = {}
 
-M.supported = { "en", "ja", "zh" }
+M.supported = { "en", "ja", "zh", "zh-Hans", "zh-Hant" }
 
 -- How the prompt names each language.
 local LANGUAGE = {
   en = "English",
   ja = "Japanese",
   zh = "Simplified Chinese",
+  ["zh-Hant"] = "Traditional Chinese",
 }
 
 -- Category / severity labels. English uses the schema values as-is.
@@ -23,6 +24,18 @@ local LABELS = {
     warning = "警告",
     suggestion = "提案",
     info = "情報",
+  },
+  ["zh-Hant"] = {
+    typo = "錯別字",
+    grammar = "語法",
+    style = "文體",
+    punctuation = "標點",
+    clarity = "清晰度",
+    consistency = "一致性",
+    critical = "嚴重",
+    warning = "警告",
+    suggestion = "建議",
+    info = "提示",
   },
   zh = {
     typo = "错别字",
@@ -43,7 +56,20 @@ function M.normalize(lang)
   if type(lang) ~= "string" then
     return nil
   end
-  local code = lang:lower():match("^(%a%a)")
+  local value = lang:lower():gsub("_", "-")
+  local code = value:match("^(%a%a)")
+  if code == "zh" then
+    if value:find("-hant", 1, true) then
+      return "zh-Hant"
+    end
+    if value:find("-hans", 1, true) then
+      return "zh"
+    end
+    if value:match("^zh%-tw") or value:match("^zh%-hk") or value:match("^zh%-mo") then
+      return "zh-Hant"
+    end
+    return "zh"
+  end
   if code and LANGUAGE[code] then
     return code
   end
@@ -71,12 +97,12 @@ function M.current()
 end
 
 function M.language(loc)
-  return LANGUAGE[loc or M.current()]
+  return LANGUAGE[M.normalize(loc) or M.current()]
 end
 
 ---Localized label for a category or severity value; falls back to the value itself.
 function M.label(key, loc)
-  local t = LABELS[loc or M.current()]
+  local t = LABELS[M.normalize(loc) or M.current()]
   return t and t[key] or key
 end
 

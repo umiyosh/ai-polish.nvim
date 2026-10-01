@@ -48,6 +48,9 @@ end
 
 function M.setup(opts)
   config.setup(opts)
+  if package.loaded["ai-polish.evaluation"] then
+    require("ai-polish.evaluation").reset()
+  end
   set_highlights()
 end
 
@@ -172,13 +175,22 @@ local function finish(bufnr, req, results, errors)
   if #errors > 0 then
     notify(("%d of %d request(s) failed: %s"):format(#errors, #req.chunks, errors[1]), vim.log.levels.WARN)
   end
+  local er, ec = text.pos_at(cur, #cur, row0, col0)
+  local evaluation = { whole = req.whole, range = { row0, col0, er, ec } }
+  require("ai-polish.evaluation").evaluate({
+    bufnr = bufnr,
+    whole = evaluation.whole,
+    range = not evaluation.whole and evaluation.range or nil,
+    automatic = true,
+    show = true,
+  })
   if #items == 0 then
     return notify(
       "no issues found" .. (dropped > 0 and (" (%d unlocatable suggestion(s) ignored)"):format(dropped) or "")
     )
   end
 
-  local s = session.create(bufnr, items)
+  local s = session.create(bufnr, items, evaluation)
   local msg = ("%d suggestion(s)"):format(#s.items)
   if dropped > 0 then
     msg = msg .. (" (%d unlocatable ignored)"):format(dropped)
@@ -238,6 +250,7 @@ function M.proofread(opts)
   popup.close()
 
   local req = {
+    whole = opts.range == nil,
     chunks = chunks,
     tick = vim.api.nvim_buf_get_changedtick(bufnr),
     mark = vim.api.nvim_buf_set_extmark(bufnr, region_ns, r[1], r[2], {
@@ -310,10 +323,12 @@ function M.proofread_lines(bufnr, line1, line2)
 end
 
 function M.cancel(bufnr)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local evaluation = package.loaded["ai-polish.evaluation"]
+  bufnr = bufnr or (evaluation and evaluation.source()) or vim.api.nvim_get_current_buf()
+  local eval_cancelled = evaluation and evaluation.cancel(bufnr)
   local job = jobs[bufnr]
   if not job then
-    return notify("nothing to cancel")
+    return notify(eval_cancelled and "cancelled" or "nothing to cancel")
   end
   job.cancel()
   notify("cancelled")
@@ -331,7 +346,11 @@ function M.review(bufnr)
 end
 
 function M.clear(bufnr)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local evaluation = package.loaded["ai-polish.evaluation"]
+  bufnr = bufnr or (evaluation and evaluation.source()) or vim.api.nvim_get_current_buf()
+  if package.loaded["ai-polish.evaluation"] then
+    require("ai-polish.evaluation").clear(bufnr)
+  end
   popup.close()
   session.clear(bufnr)
 end

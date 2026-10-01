@@ -1,0 +1,79 @@
+*ai-polish.txt*  Optional text evaluation and Gemini proofreading
+
+JEV EVALUATION                                      *ai-polish-evaluation*
+
+Jev is optional. Set $TYPESAFE_API_KEY locally or evaluation.api_key in setup().
+No key/disabled means no evaluation UI. Gemini proofreading is unchanged.
+
+:AiPolish evaluate          Evaluate the retained target, or initially the buffer.
+:'<,'>AiPolish evaluate     Set/evaluate a characterwise or linewise selection.
+:AiPolish evaluate buffer   Explicitly return to whole-buffer evaluation.
+:AiPolish toggle            Toggle this tab's panel. No request.
+:AiPolish polish            Proofread current retained target with Gemini.
+:AiPolish details           Local findings/coverage and AI-style distribution.
+                           q/Esc closes; j/k scrolls. No request.
+:AiPolish cancel            Cancel pending Gemini and Jev work for this source.
+:AiPolish clear             Remove suggestions and evaluation target/results.
+
+<Plug>(ai-polish-evaluate)           Normal/Visual; Visual selection stays active.
+<Plug>(ai-polish-evaluation-toggle)  Normal/Visual; display only.
+<Plug>(ai-polish-proofread-target)   Normal; Gemini for the retained target.
+
+No global bindings are installed. Suggested user keys: <leader>ae / <leader>at.
+Normal evaluation follows the selected target through edits, including accepts.
+It never widens a deleted target to the whole buffer. Choose a new range instead.
+Block selections are refused. Source text is never converted between scripts.
+
+Only explicit evaluation calls Jev. Edit/paste/save, accept/reject, navigation and
+show/hide do not send text. A previous result is marked stale. Hiding does not
+cancel a request, and its completion does not reopen/focus the panel.
+
+Unnaturalness means whether another proofreading pass is useful. AI style means
+formulaic/mechanical writing, not authorship detection. Five cells show increasing
+severity. Unnaturalness combines sentence and phrase Noul checks (Kotobae #44).
+AI style uses argmax(probabilities)+1, lower tie; its confidence below 0.5 shows
+uncertainty. Confidence is not accuracy. Local levels have no Score confidence.
+Details show up to three local findings, coverage and provisional language limits.
+
+CONFIGURATION                                      *ai-polish-evaluation-config*
+>
+  require('ai-polish').setup({
+    locale = 'ja', -- en / ja / zh / zh-Hans / zh-Hant; nil detects locale
+    evaluation = {
+      enabled = true,
+      api_key = nil, -- optional string/callback, or $TYPESAFE_API_KEY
+      model = 'jev-latest',
+      timeout_ms = 20000,
+      max_chars = 12000,
+      language = 'auto', -- source hint, independent of UI locale
+      panel_width = 30, -- 30..60; wider permits a single row if it fits
+      uncertainty_threshold = 0.5,
+    },
+  })
+<
+Callback failures never print exception contents; successful keys are cached until
+setup(). Passive UI events never invoke a key callback. :checkhealth ai-polish is
+an explicit local key check, with no validation HTTP request.
+
+Text goes to https://api.typesafe.ai/v1/systemone only on evaluation. Up to 60
+questions/request, four concurrent requests and 16 requests/evaluation. Short
+texts use one request. Unnaturalness is partial at the limit; panel/details show
+coverage and omitted spans. Japanese-only segmentation/structure rules and neutral
+kana references follow Kotobae #41/#44. Chinese uses punctuation clauses; Chinese
+and English thresholds are provisional. Explicit evaluation.language overrides
+auto detection (kana => ja; Han-only => zh; otherwise en), separate from UI locale.
+No automatic retries or disk cache. One failed batch fails the run. The smaller
+of evaluation.max_chars and guard.max_chars applies. Above guard.confirm_chars or
+guard.confirm_requests, confirmation shows TypeSafe, planned requests and coverage.
+The 12,000 character limit is a client choice, not a provider maximum. Gemini
+settings/retries are separate.
+
+Unrelated special buffers, completion, command line and overlapping correction
+floats temporarily hide the panel. Details suppress the panel. Visibility is per
+tab and results are per buffer. Colors can be customized with AiPolishEvalLow,
+AiPolishEvalMid, AiPolishEvalHigh, AiPolishEvalStale and AiPolishEvalEmpty.
+
+For offline UI examples: nvim -u scripts/jev-demo.lua (fixture values, no API).
+See README.md / README.ja.md and docs/jev.md for design, limitations and validation.
+
+vim:tw=78:ts=8:ft=help:norl:

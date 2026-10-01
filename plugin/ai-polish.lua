@@ -21,8 +21,53 @@ local subcommands = {
   end,
 }
 
+local function evaluation()
+  return require("ai-polish.evaluation")
+end
+
+subcommands.evaluate = function(cmd)
+  local opts = {}
+  if cmd.fargs[2] == "buffer" then
+    if cmd.range > 0 then
+      return evaluation().notify("invalid_request")
+    end
+    opts.whole = true
+  elseif cmd.fargs[2] then
+    return evaluation().notify("invalid_request")
+  end
+  if cmd.range > 0 then
+    local target = require("ai-polish.evaluation_target")
+    if cmd.line1 == vim.fn.line("'<") and cmd.line2 == vim.fn.line("'>") then
+      local err
+      opts.range, err, opts.kind = target.visual(vim.api.nvim_get_current_buf(), false)
+      if not opts.range then
+        return evaluation().notify(err)
+      end
+    else
+      local line = vim.api.nvim_buf_get_lines(0, cmd.line2 - 1, cmd.line2, false)[1] or ""
+      opts.range, opts.kind = { cmd.line1 - 1, 0, cmd.line2 - 1, #line }, "lines"
+    end
+  end
+  evaluation().evaluate(opts)
+end
+subcommands.toggle = function()
+  evaluation().toggle()
+end
+subcommands.polish = function()
+  evaluation().polish()
+end
+subcommands.details = function()
+  evaluation().details()
+end
+
 vim.api.nvim_create_user_command("AiPolish", function(cmd)
   local sub = cmd.fargs[1]
+  if #cmd.fargs > 2 or (#cmd.fargs > 1 and sub ~= "evaluate") then
+    return vim.notify("ai-polish: unexpected arguments", vim.log.levels.INFO)
+  end
+  if cmd.range > 0 and (sub == "toggle" or sub == "polish" or sub == "details") then
+    return vim.notify("ai-polish: this action does not accept a range", vim.log.levels.INFO)
+  end
   if sub then
     local fn = subcommands[sub]
     if not fn then
@@ -41,10 +86,13 @@ vim.api.nvim_create_user_command("AiPolish", function(cmd)
   end
   require("ai-polish").proofread_lines(0, cmd.line1, cmd.line2)
 end, {
-  nargs = "?",
+  nargs = "*",
   range = true,
   desc = "Proofread the selection or buffer with Gemini",
-  complete = function(arg)
+  complete = function(arg, line)
+    if line:match("AiPolish%s+evaluate%s+") then
+      return vim.startswith("buffer", arg) and { "buffer" } or {}
+    end
     return vim.tbl_filter(function(k)
       return vim.startswith(k, arg)
     end, vim.tbl_keys(subcommands))
@@ -68,4 +116,26 @@ vim.keymap.set(
   "<Plug>(ai-polish-review)",
   "<Cmd>AiPolish review<CR>",
   { silent = true, desc = "ai-polish: review suggestions" }
+)
+
+vim.keymap.set("n", "<Plug>(ai-polish-evaluate)", function()
+  evaluation().evaluate()
+end, { desc = "ai-polish: evaluate text with Jev" })
+vim.keymap.set(
+  "x",
+  "<Plug>(ai-polish-evaluate)",
+  "<Cmd>lua require('ai-polish.evaluation').evaluate({ visual = true })<CR>",
+  { desc = "ai-polish: evaluate selection with Jev" }
+)
+vim.keymap.set(
+  { "n", "x" },
+  "<Plug>(ai-polish-evaluation-toggle)",
+  "<Cmd>AiPolish toggle<CR>",
+  { desc = "ai-polish: toggle evaluation panel (no request)" }
+)
+vim.keymap.set(
+  "n",
+  "<Plug>(ai-polish-proofread-target)",
+  "<Cmd>AiPolish polish<CR>",
+  { desc = "ai-polish: proofread evaluated target with Gemini" }
 )
