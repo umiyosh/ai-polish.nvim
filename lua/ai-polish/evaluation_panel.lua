@@ -41,12 +41,15 @@ local function highlights()
   vim.api.nvim_set_hl(0, "AiPolishEvalHigh", { fg = warn.fg, bold = true, default = true })
 end
 
--- Resolve only direct Plug mappings; never guess what a Lua wrapper does.
-function M.mapping(buf, mode, plug)
+-- Resolve direct Plug/command mappings; never guess what a Lua wrapper does.
+function M.mapping(buf, mode, plug, command)
   local seen, matches = {}, {}
   for _, maps in ipairs({ vim.api.nvim_buf_get_keymap(buf, mode), vim.api.nvim_get_keymap(mode) }) do
     for _, map in ipairs(maps) do
-      if not seen[map.lhs] and map.rhs == "<Plug>(ai-polish-" .. plug .. ")" then
+      local rhs = (map.rhs or ""):lower()
+      local direct = command
+        and (rhs == "<cmd>aipolish " .. command .. "<cr>" or rhs == ":aipolish " .. command .. "<cr>")
+      if not seen[map.lhs] and (map.rhs == "<Plug>(ai-polish-" .. plug .. ")" or direct) then
         matches[#matches + 1] = vim.fn.keytrans(map.lhs)
       end
       seen[map.lhs] = true
@@ -58,10 +61,38 @@ function M.mapping(buf, mode, plug)
   return matches[1]
 end
 
+-- Pack complete hints, never truncate a key sequence into an unusable shortcut.
+local function shortcuts(buf, width)
+  local t, mode = copy.get(), vim.fn.mode()
+  mode = (mode == "v" or mode == "V") and "x" or "n"
+  local lines = {}
+  for _, action in ipairs({
+    { t.evaluate, "evaluate", "evaluate" },
+    { t.hide, "evaluation-toggle", "toggle" },
+    { t.details, "evaluation-details", "details" },
+  }) do
+    local key = M.mapping(buf, mode, action[2], action[3])
+    local command = (mode == "x" and action[3] ~= "evaluate" and ":<C-u>" or ":") .. "AiPolish " .. action[3]
+    local entry = action[1] .. " " .. (key or command)
+    if vim.fn.strdisplaywidth(entry) > width then
+      entry = action[1] .. " " .. command
+    end
+    if vim.fn.strdisplaywidth(entry) > width then
+      entry = command
+    end
+    if #lines > 0 and vim.fn.strdisplaywidth(lines[#lines] .. "  " .. entry) <= width then
+      lines[#lines] = lines[#lines] .. "  " .. entry
+    else
+      lines[#lines + 1] = entry
+    end
+  end
+  return lines
+end
+
 local function hint(buf, snap, width)
   local t, mode = copy.get(), vim.fn.mode()
-  local action, fallback, map = t.evaluate, ":AiPolish evaluate"
-  if snap.status == "loading" then
+  local action, fallback, map = t.proofread, ":AiPolish polish"
+  if snap.status ~= "ready" then
     return ""
   end
   if snap.status == "ready" then
@@ -78,8 +109,6 @@ local function hint(buf, snap, width)
         end
       end
     end
-  else
-    map = M.mapping(buf, (mode == "v" or mode == "V") and "x" or "n", "evaluate")
   end
   local line = action .. ": " .. (map or fallback)
   if vim.fn.strdisplaywidth(line) > width then
@@ -155,6 +184,10 @@ function M.render(buf, snap, width)
     spans = split
   end
   lines[#lines + 1] = hint(buf, snap, width)
+  for _, line in ipairs(shortcuts(buf, width)) do
+    spans[#spans + 1] = { #lines, 0, #line, "AiPolishHint" }
+    lines[#lines + 1] = line
+  end
   return lines, spans
 end
 
@@ -187,7 +220,8 @@ end
 
 local function dimensions()
   local width = math.min(config.options.evaluation.panel_width, vim.o.columns - 4)
-  local height = wide_layout(width) and 2 or 3
+  local height = (wide_layout(width) and 2 or 3)
+    + #shortcuts(controller().source() or vim.api.nvim_get_current_buf(), width)
   return width, height, vim.o.lines - vim.o.cmdheight - 2
 end
 

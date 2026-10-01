@@ -1,5 +1,5 @@
--- Only explicit evaluation and bounded proofreading/acceptance hooks send requests.
--- Observers invalidate/render, never issue HTTP requests.
+-- Explicit evaluation and bounded proofreading/acceptance/InsertLeave hooks send requests.
+-- Other observers only invalidate/render.
 local config = require("ai-polish.config")
 local target = require("ai-polish.evaluation_target")
 local jev = require("ai-polish.jev")
@@ -136,6 +136,9 @@ function M.evaluate(opts)
     end
     M.cancel(buf) -- superseded results must not win, even when the new text is too large
     local auto_range = opts.range or (opts.whole and target.whole(buf))
+    if not auto_range and M.states[buf] then
+      auto_range = target.range(buf, M.states[buf].target)
+    end
     if not auto_range then
       return
     end
@@ -215,6 +218,7 @@ function M.evaluate(opts)
     end
   end
   local job = {}
+  s.requested_text = content
   s.pending, s.error = job, nil
   panel().refresh()
   local ok, handle = pcall(jev.evaluate, content, key, function(result, failure)
@@ -280,6 +284,21 @@ function M.details()
 end
 
 local group = vim.api.nvim_create_augroup("AiPolishEvaluation", { clear = true })
+vim.api.nvim_create_autocmd("InsertLeave", {
+  group = group,
+  callback = function(ev)
+    if M.source() ~= ev.buf or not M.view().visible or not panel().is_open() then
+      return
+    end
+    local s = M.states[ev.buf]
+    local range = s and target.range(ev.buf, s.target)
+    if not range or not s.requested_text or target.read(ev.buf, range) == s.requested_text then
+      return
+    end
+    -- Reuse the tracked target; never widen a selection or retry unchanged failures.
+    M.evaluate({ bufnr = ev.buf, automatic = true })
+  end,
+})
 vim.api.nvim_create_autocmd({
   "BufEnter",
   "WinEnter",

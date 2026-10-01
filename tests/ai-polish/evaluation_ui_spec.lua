@@ -58,7 +58,7 @@ describe("evaluation targets and UI", function()
             result = { unnaturalness = axis(level), ai_style = axis(level) },
           }
           local rendered = panel.render(buf, snap, 30)
-          assert.equals(3, #rendered)
+          assert.equals(6, #rendered)
           for _, line in ipairs(rendered) do
             assert.is_true(vim.fn.strdisplaywidth(line) <= 30, locale .. ": " .. line)
           end
@@ -77,6 +77,24 @@ describe("evaluation targets and UI", function()
     vim.keymap.set("n", "<Space>ap", "<Nop>", { buffer = buf })
     assert.is_nil(panel.mapping(buf, "n", "buffer"))
     vim.keymap.del("n", "<Space>ap")
+  end)
+  it("shows evaluate, hide and details keys together in every panel state", function()
+    vim.keymap.set("n", ",pe", "<Plug>(ai-polish-evaluate)")
+    vim.keymap.set("n", ",pt", "<Plug>(ai-polish-evaluation-toggle)")
+    vim.keymap.set("n", ",pd", "<cmd>AiPolish details<CR>")
+    for _, status in ipairs({ "none", "loading", "ready", "stale", "error" }) do
+      local rendered = panel.render(buf, { status = status, target = { kind = "whole" } }, 30)
+      assert.equals(4, #rendered)
+      assert.equals("評価 ,pe  非表示 ,pt  詳細 ,pd", rendered[4])
+      assert.equals(30, vim.fn.strdisplaywidth(rendered[4]))
+    end
+    vim.keymap.set("n", ",pd", function() end, { buffer = buf })
+    local rendered = table.concat(panel.render(buf, { status = "none" }, 30), "\n")
+    assert.is_nil(rendered:find(",pd", 1, true))
+    assert.is_truthy(rendered:find(":AiPolish details", 1, true))
+    for _, key in ipairs({ ",pe", ",pt", ",pd" }) do
+      vim.keymap.del("n", key)
+    end
   end)
   it("keeps passive focus and per-tab visibility, hiding special buffers", function()
     local win = vim.api.nvim_get_current_win()

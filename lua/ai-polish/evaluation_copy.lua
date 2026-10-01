@@ -1,6 +1,7 @@
 local M = {}
 local copy = {
   en = {
+    hide = "Hide",
     check = "Check",
     partial = "Partial",
     local_method = "Local sentence / phrase checks",
@@ -70,6 +71,7 @@ local copy = {
     },
   },
   ja = {
+    hide = "非表示",
     check = "確認",
     partial = "一部のみ",
     local_method = "文・句ごとの局所判定",
@@ -139,6 +141,7 @@ local copy = {
     },
   },
   zh = {
+    hide = "隐藏",
     check = "检查",
     partial = "部分评估",
     local_method = "逐句与局部短语检查",
@@ -208,6 +211,7 @@ local copy = {
     },
   },
   ["zh-Hant"] = {
+    hide = "隱藏",
     check = "檢查",
     partial = "部分評估",
     local_method = "逐句與局部短語檢查",
