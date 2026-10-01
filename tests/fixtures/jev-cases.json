@@ -208,5 +208,68 @@
     "kind": "holdout-error",
     "text": "收到後請回覆覆這封郵件。",
     "split": "holdout"
+  },
+  {
+    "id": "ja-style-boundary",
+    "language": "ja",
+    "kind": "normal",
+    "text": "多少調整に手間取ったが、まだ再校正する必要があるかどうかを把握する上で、期待通りに動作し、便利だった。",
+    "split": "development"
+  },
+  {
+    "id": "ja-kana-reference",
+    "language": "ja",
+    "kind": "typo",
+    "text": "共有していたたただきありがとうございます。複数の観点を意図的に盛り込んでいます。",
+    "split": "development"
+  },
+  {
+    "id": "ja-topic-rule",
+    "language": "ja",
+    "kind": "grammar",
+    "text": "目的は、設定を変更しました。",
+    "split": "development"
+  },
+  {
+    "id": "hans-local-error",
+    "language": "zh-Hans",
+    "kind": "typo",
+    "text": "我们已经完成了检查。请保保存设置后再关闭窗口。其他功能正常。",
+    "split": "development"
+  },
+  {
+    "id": "hans-normal-repeat",
+    "language": "zh-Hans",
+    "kind": "normal",
+    "text": "我们已经完成了检查。请仔细看看设置，再保存更改。其他功能正常。",
+    "split": "development"
+  },
+  {
+    "id": "hans-regional",
+    "language": "zh-Hans",
+    "kind": "technical",
+    "text": "请在后台更新数据库，并通过 API 同步配置。",
+    "split": "development"
+  },
+  {
+    "id": "hant-local-error",
+    "language": "zh-Hant",
+    "kind": "typo",
+    "text": "我們已經完成檢查。請儲儲存設定後再關閉視窗。其他功能正常。",
+    "split": "development"
+  },
+  {
+    "id": "hant-normal-repeat",
+    "language": "zh-Hant",
+    "kind": "normal",
+    "text": "我們已經完成檢查。請仔細看看設定，再儲存變更。其他功能正常。",
+    "split": "development"
+  },
+  {
+    "id": "hant-regional",
+    "language": "zh-Hant",
+    "kind": "technical",
+    "text": "請在後台更新資料庫，並透過 API 同步設定。",
+    "split": "development"
   }
 ]

@@ -10,7 +10,7 @@ No key/disabled means no evaluation UI. Gemini proofreading is unchanged.
 :AiPolish evaluate buffer   Explicitly return to whole-buffer evaluation.
 :AiPolish toggle            Toggle this tab's panel. No request.
 :AiPolish polish            Proofread current retained target with Gemini.
-:AiPolish details           Cached criteria, probabilities and confidence.
+:AiPolish details           Local findings/coverage and AI-style distribution.
                            q/Esc closes; j/k scrolls. No request.
 :AiPolish cancel            Cancel pending Gemini and Jev work for this source.
 :AiPolish clear             Remove suggestions and evaluation target/results.
@@ -30,8 +30,10 @@ cancel a request, and its completion does not reopen/focus the panel.
 
 Unnaturalness means whether another proofreading pass is useful. AI style means
 formulaic/mechanical writing, not authorship detection. Five cells show increasing
-severity. Level = argmax(probabilities)+1; ties prefer the lower level. Confidence
-is separate, not accuracy; below 0.5 the default UI says uncertain.
+severity. Unnaturalness combines sentence and phrase Noul checks (Kotobae #44).
+AI style uses argmax(probabilities)+1, lower tie; its confidence below 0.5 shows
+uncertainty. Confidence is not accuracy. Local levels have no Score confidence.
+Details show up to three local findings, coverage and provisional language limits.
 
 CONFIGURATION                                      *ai-polish-evaluation-config*
 >
@@ -53,11 +55,18 @@ Callback failures never print exception contents; successful keys are cached unt
 setup(). Passive UI events never invoke a key callback. :checkhealth ai-polish is
 an explicit local key check, with no validation HTTP request.
 
-Text goes to https://api.typesafe.ai/v1/systemone as two independent Score questions
-in one request. There is no automatic retry, chunking, truncation, or disk result
-cache. The smaller of evaluation.max_chars and guard.max_chars applies; above
-guard.confirm_chars confirmation names TypeSafe. The 12,000 character limit is a
-client choice, not a measured provider maximum. Gemini guards/retries are separate.
+Text goes to https://api.typesafe.ai/v1/systemone only on evaluation. Up to 60
+questions/request, four concurrent requests and 16 requests/evaluation. Short
+texts use one request. Unnaturalness is partial at the limit; panel/details show
+coverage and omitted spans. Japanese-only segmentation/structure rules and neutral
+kana references follow Kotobae #41/#44. Chinese uses punctuation clauses; Chinese
+and English thresholds are provisional. Explicit evaluation.language overrides
+auto detection (kana => ja; Han-only => zh; otherwise en), separate from UI locale.
+No automatic retries or disk cache. One failed batch fails the run. The smaller
+of evaluation.max_chars and guard.max_chars applies. Above guard.confirm_chars or
+guard.confirm_requests, confirmation shows TypeSafe, planned requests and coverage.
+The 12,000 character limit is a client choice, not a provider maximum. Gemini
+settings/retries are separate.
 
 Unrelated special buffers, completion, command line and overlapping correction
 floats temporarily hide the panel. Details suppress the panel. Visibility is per

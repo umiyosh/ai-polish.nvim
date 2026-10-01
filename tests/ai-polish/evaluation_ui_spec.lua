@@ -166,4 +166,38 @@ describe("evaluation targets and UI", function()
     vim.o.columns = 34
     assert.is_true(panel.fits())
   end)
+  it("shows local evidence and coverage without borrowing whole-Score confidence", function()
+    local c = {
+      level = 3,
+      method = "local",
+      value = 0.4,
+      evaluated_sentences = 2,
+      sentences = 3,
+      omitted_spans = 0,
+      provisional = true,
+      findings = { { kind = "phrase", text = "用語を誤った" } },
+    }
+    ev.states[buf] = {
+      target = { kind = "whole" },
+      text = target.read(buf, target.whole(buf)),
+      result = { unnaturalness = c, ai_style = axis(2) },
+    }
+    for _, locale in ipairs({ "ja", "zh-Hans", "zh-Hant", "en" }) do
+      require("ai-polish.config").options.locale = locale
+      c.coverage_unit = "segments"
+      local copy = require("ai-polish.evaluation_copy").get()
+      local rendered = panel.render(buf, ev.snapshot(buf), 30)
+      assert.is_truthy(rendered[1]:find(copy.partial, 1, true))
+      assert.is_true(vim.fn.strdisplaywidth(rendered[1]) <= 30)
+      ev.details()
+      local detail_lines = vim.api.nvim_buf_get_lines(panel.context().buf, 0, -1, false)
+      local text = table.concat(detail_lines, "\n")
+      assert.is_truthy(text:find(copy.coverage_segments:format(2, 3), 1, true))
+      assert.is_truthy(text:find(copy.provisional, 1, true))
+      assert.is_truthy(text:find("用語を誤った", 1, true))
+      local first = text:sub(1, assert(text:find(copy.axes[2], 1, true)) - 1)
+      assert.is_nil(first:find(copy.confidence, 1, true))
+      panel.close_details()
+    end
+  end)
 end)

@@ -99,7 +99,9 @@ local function axis_line(t, index, snap)
     group = level <= 2 and "AiPolishEvalLow" or (level == 3 and "AiPolishEvalMid" or "AiPolishEvalHigh")
     if snap.status == "stale" then
       word, group = t.stale .. " " .. level .. "/5", "AiPolishEvalStale"
-    elseif a.confidence < config.options.evaluation.uncertainty_threshold then
+    elseif a.method == "local" and (a.evaluated_sentences < a.sentences or a.omitted_spans > 0) then
+      word = t.partial
+    elseif a.confidence and a.confidence < config.options.evaluation.uncertainty_threshold then
       word = t.uncertain
     end
   end
@@ -111,7 +113,9 @@ local function wide_layout(width)
   for axis = 1, 2 do
     local longest = 0
     for _, word in
-      ipairs(vim.list_extend(vim.deepcopy(t.stages[axis]), { t.none, t.loading, t.stale .. " 5/5", t.uncertain }))
+      ipairs(
+        vim.list_extend(vim.deepcopy(t.stages[axis]), { t.none, t.loading, t.stale .. " 5/5", t.uncertain, t.partial })
+      )
     do
       longest = math.max(longest, vim.fn.strdisplaywidth(word))
     end
@@ -244,24 +248,46 @@ local function detail_lines(buf)
       local a = snap.result[id]
       lines[#lines + 1] = ("%s %d/5 %s"):format(t.axes[i], a.level, t.stages[i][a.level])
       lines[#lines + 1] = t.criteria[i][a.level]
-      local uncertain = a.confidence < config.options.evaluation.uncertainty_threshold
-      lines[#lines + 1] = ("%s: %.0f%%%s"):format(
-        t.confidence,
-        a.confidence * 100,
-        uncertain and (" (" .. t.uncertain .. ")") or ""
-      )
-      local longest = 0
-      for _, label in ipairs(t.stages[i]) do
-        longest = math.max(longest, vim.fn.strdisplaywidth(label))
-      end
-      for level = 1, 5 do
-        lines[#lines + 1] = ("%s %d %s%s %3.0f%%"):format(
-          level == a.level and ">" or " ",
-          level,
-          t.stages[i][level],
-          string.rep(" ", longest - vim.fn.strdisplaywidth(t.stages[i][level])),
-          a.probabilities[level] * 100
+      if a.method == "local" then
+        lines[#lines + 1] = t.findings .. ":"
+        if #a.findings == 0 then
+          lines[#lines + 1] = t.no_findings
+        end
+        for _, finding in ipairs(a.findings) do
+          lines[#lines + 1] = "- " .. (finding.kind == "structure" and (t.structure .. ": ") or "") .. finding.text
+        end
+        lines[#lines + 1] = t.local_method
+        lines[#lines + 1] = (a.coverage_unit == "segments" and t.coverage_segments or t.coverage):format(
+          a.evaluated_sentences,
+          a.sentences
         )
+        if a.omitted_spans > 0 then
+          lines[#lines + 1] = t.omitted:format(a.omitted_spans)
+        end
+        if a.provisional then
+          lines[#lines + 1] = t.provisional
+        end
+        lines[#lines + 1] = t.local_rule
+      else
+        local uncertain = a.confidence < config.options.evaluation.uncertainty_threshold
+        lines[#lines + 1] = ("%s: %.0f%%%s"):format(
+          t.confidence,
+          a.confidence * 100,
+          uncertain and (" (" .. t.uncertain .. ")") or ""
+        )
+        local longest = 0
+        for _, label in ipairs(t.stages[i]) do
+          longest = math.max(longest, vim.fn.strdisplaywidth(label))
+        end
+        for level = 1, 5 do
+          lines[#lines + 1] = ("%s %d %s%s %3.0f%%"):format(
+            level == a.level and ">" or " ",
+            level,
+            t.stages[i][level],
+            string.rep(" ", longest - vim.fn.strdisplaywidth(t.stages[i][level])),
+            a.probabilities[level] * 100
+          )
+        end
       end
       lines[#lines + 1] = ""
     end

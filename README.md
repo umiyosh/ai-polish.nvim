@@ -186,9 +186,9 @@ Set `TYPESAFE_API_KEY` locally, or supply `evaluation.api_key` (a string or a fu
 | `:AiPolish details` | Inspect cached criteria, distribution and confidence; `q`/Esc close, `j`/`k` scroll |
 | `:AiPolish cancel` / `clear` | Cancel pending evaluation; clear also removes its target and result |
 
-The non-focusable bottom-right panel defaults to 30 cells, with separate unnaturalness and AI-style rows. Filled cells mean stronger issues, not better writing. AI style describes mechanical or formulaic prose, **not the probability that AI wrote it**. Details keep model confidence separate from the five-level distribution.
+The non-focusable bottom-right panel defaults to 30 cells, with separate unnaturalness and AI-style rows. Filled cells mean stronger issues, not better writing. AI style describes mechanical or formulaic prose, **not the probability that AI wrote it**. Details show local findings and coverage for unnaturalness; AI style retains its distribution and separate confidence.
 
-Only explicit evaluation sends text to [TypeSafe](https://docs.typesafe.ai/api), in one request containing both questions. Typing, pasting, saving, accepting/rejecting suggestions, switching buffers, and toggling the panel send **nothing** to Jev. Editing shows the previous result and an evaluation hint. A selection is tracked through edits; Normal-mode evaluation follows it instead of silently widening to the buffer. A deleted range must be selected again. Hiding the panel does not cancel a request or reopen it on completion.
+Only explicit evaluation sends text to [TypeSafe](https://docs.typesafe.ai/api), using local sentence/phrase Noul checks for unnaturalness and whole-text Score for AI style. Short texts fit in one request; long texts use up to 60 questions per batch, four concurrent requests and 16 requests total. Partial local coverage is explicitly marked. Japanese segmentation, bounded kana references and a narrow subject-predicate rule follow [Kotobae #41](https://github.com/umiyosh/kotobae/pull/41) / [#44](https://github.com/umiyosh/kotobae/pull/44). Chinese uses punctuation clauses without Japanese rules or script conversion; non-Japanese thresholds remain provisional. Typing, pasting, saving, accepting/rejecting suggestions, switching buffers, and toggling the panel send **nothing** to Jev. Editing shows the previous result and an evaluation hint. A selection is tracked through edits; Normal-mode evaluation follows it instead of silently widening to the buffer. A deleted range must be selected again. Hiding the panel does not cancel a request or reopen it on completion.
 
 ```lua
 evaluation = {
@@ -203,7 +203,7 @@ evaluation = {
 },
 ```
 
-The smaller of `evaluation.max_chars` and `guard.max_chars` applies. Above `guard.confirm_chars`, confirmation names TypeSafe as the destination. Jev is not chunked and **never automatically retried**, including 429/529; press evaluation again to retry. The 12,000-character cap is a conservative client limit, not a claim about the provider's maximum. Gemini's existing guards and retry policy remain separate.
+The smaller of `evaluation.max_chars` and `guard.max_chars` applies. Above `guard.confirm_chars` or `guard.confirm_requests`, confirmation names TypeSafe, the planned request count and local coverage. Jev batches are **never automatically retried**, including 429/529; press evaluation again to retry. One failed batch fails the entire evaluation. The 12,000-character cap is a conservative client limit, not a claim about the provider's maximum. Gemini's existing guards and retry policy remain separate.
 
 Theme groups: `AiPolishEvalLow` (DiagnosticOk), `AiPolishEvalMid` (DiagnosticWarn), `AiPolishEvalHigh` (bold warning color), `AiPolishEvalLabel`/`Stale` (NormalFloat), `AiPolishEvalError` (DiagnosticWarn). No added font dependency. Panels hide on unrelated special buffers or overlap with the correction popup, and Gemini progress stacks above them.
 

@@ -172,10 +172,15 @@ function M.evaluate(opts)
     panel().refresh()
     return
   end
-  if vim.fn.strchars(content) > config.options.guard.confirm_chars then
-    local msg = ("Send %d characters to TypeSafe (Jev)? One request for two evaluations."):format(
-      vim.fn.strchars(content)
-    )
+  local planned = jev.plan(content)
+  if
+    vim.fn.strchars(content) > config.options.guard.confirm_chars
+    or #planned.batches > config.options.guard.confirm_requests
+  then
+    local msg = (
+      "Evaluate a %d-character target with TypeSafe (Jev) using %d requests? "
+      .. "Excerpts repeat across questions. Local units: %d/%d."
+    ):format(vim.fn.strchars(content), #planned.batches, planned.evaluated, #planned.sentences)
     if not require("ai-polish")._confirm(msg) then
       return
     end
@@ -192,7 +197,7 @@ function M.evaluate(opts)
       s.result, s.text = result, content
     end
     M.schedule() -- honor visibility and active tab; never focus/open here directly
-  end)
+  end, planned)
   if not ok then
     s.pending, s.error = nil, "transport"
     panel().refresh()

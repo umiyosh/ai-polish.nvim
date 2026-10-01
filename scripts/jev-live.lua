@@ -24,19 +24,27 @@ local report = {
 for _, case in ipairs(cases) do
   config.options.evaluation.language = case.language
   local finished, result, failure = false
+  local planned = require("ai-polish.jev").plan(case.text)
   local started = vim.uv.hrtime()
   local handle = require("ai-polish.jev").evaluate(case.text, key, function(value, error_code)
     result, failure, finished = value, error_code, true
-  end)
-  if not vim.wait(config.options.evaluation.timeout_ms + 2000, function()
-    return finished
-  end, 20) then
+  end, planned)
+  if
+    not vim.wait(config.options.evaluation.timeout_ms * math.ceil(#planned.batches / 4) + 2000, function()
+      return finished
+    end, 20)
+  then
     handle.cancel()
     failure = "timeout"
+  end
+  -- Findings contain source excerpts; omit them from this safe comparison report.
+  if result then
+    result.unnaturalness.findings = nil
   end
   report.results[#report.results + 1] = {
     id = case.id,
     result = result,
+    planned_requests = #planned.batches,
     error = failure,
     latency_ms = math.floor((vim.uv.hrtime() - started) / 1000000),
   }

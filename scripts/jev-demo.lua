@@ -27,15 +27,15 @@ require("ai-polish.http").post = function(req, cb)
   local cancelled = false
   vim.defer_fn(function()
     if not cancelled then
-      cb({
-        status = 200,
-        body = vim.json.encode({
-          answers = {
-            unnaturalness = a({ ["0"] = 0.02, ["1"] = 0.06, ["2"] = 0.83, ["3"] = 0.08, ["4"] = 0.01 }),
-            ai_style = a({ ["0"] = 0.07, ["1"] = 0.83, ["2"] = 0.08, ["3"] = 0.01, ["4"] = 0.01 }),
-          },
-        }),
-      })
+      local answers = {}
+      for id, q in pairs(vim.json.decode(req.body).questions) do
+        if q.type == "noul" then
+          answers[id] = { type = "noul", noul = 0.6 }
+        else
+          answers[id] = a({ ["0"] = 0.07, ["1"] = 0.83, ["2"] = 0.08, ["3"] = 0.01, ["4"] = 0.01 })
+        end
+      end
+      cb({ status = 200, body = vim.json.encode({ answers = answers }) })
     end
   end, 600)
   return {
