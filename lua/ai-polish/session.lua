@@ -30,9 +30,21 @@ end
 ---@param bufnr integer
 ---@param items table[] each with row, col, end_row, end_col (0-based, end-exclusive) + suggestion fields
 ---@return AiPolishSession
-function M.create(bufnr, items)
+function M.create(bufnr, items, evaluation)
   M.clear(bufnr)
   local self = setmetatable({ bufnr = bufnr, items = {}, index = 1 }, Session)
+  if evaluation then
+    self.evaluation = { whole = evaluation.whole }
+    if not evaluation.whole then
+      local r = evaluation.range
+      self.evaluation.mark = vim.api.nvim_buf_set_extmark(bufnr, M.ns, r[1], r[2], {
+        end_row = r[3],
+        end_col = r[4],
+        right_gravity = false,
+        end_right_gravity = true,
+      })
+    end
+  end
   for _, it in ipairs(items) do
     local ok, id = pcall(vim.api.nvim_buf_set_extmark, bufnr, M.ns, it.row, it.col, {
       end_row = it.end_row,
@@ -137,6 +149,23 @@ function Session:undo_break()
   end)
 end
 
+-- Track the proofreading target independently of the manual evaluation target.
+-- A changed/deleted selection never silently becomes the entire document.
+function Session:evaluate()
+  if not self.evaluation then
+    return
+  end
+  local opts = { bufnr = self.bufnr, whole = self.evaluation.whole, automatic = true }
+  if not opts.whole then
+    local m = vim.api.nvim_buf_get_extmark_by_id(self.bufnr, M.ns, self.evaluation.mark, { details = true })
+    if not m[1] or (m[1] == m[3].end_row and m[2] == m[3].end_col) then
+      return
+    end
+    opts.range = { m[1], m[2], m[3].end_row, m[3].end_col }
+  end
+  require("ai-polish.evaluation").evaluate(opts)
+end
+
 ---Accept candidate `n` (default 1) of the current suggestion.
 ---@return boolean ok, string|nil err
 function Session:accept(n)
@@ -152,6 +181,9 @@ function Session:accept(n)
   local ok, err = self:apply(item, replacement)
   -- A stale suggestion can never be applied; drop it either way.
   self:remove(self.index)
+  if ok then
+    self:evaluate()
+  end
   return ok, err
 end
 
@@ -178,6 +210,9 @@ function Session:accept_all()
     else
       skipped = skipped + 1
     end
+  end
+  if applied > 0 then
+    self:evaluate()
   end
   M.clear(self.bufnr)
   self.items = {}

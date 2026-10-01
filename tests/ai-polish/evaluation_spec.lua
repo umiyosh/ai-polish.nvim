@@ -19,7 +19,7 @@ local function reply(req)
   return { status = 200, body = vim.json.encode({ answers = answers }) }
 end
 
-describe("manual evaluation lifecycle", function()
+describe("evaluation lifecycle", function()
   local original_post, original_notify = http.post, vim.notify
   local requests, callbacks, cancelled, buf, env
   before_each(function()
@@ -112,7 +112,7 @@ describe("manual evaluation lifecycle", function()
     vim.cmd("AiPolish evaluate nonsense")
     assert.equals(1, #requests)
   end)
-  it("evaluates, proofreads and accepts only the retained target without implicit Jev calls", function()
+  it("automatically evaluates the proofreading target and each accepted correction", function()
     eval.evaluate({ range = { 1, 0, 1, 12 } })
     callbacks[1](reply(requests[1]))
     eval.polish()
@@ -147,12 +147,129 @@ describe("manual evaluation lifecycle", function()
         },
       }),
     })
-    require("ai-polish.popup")._actions.accept()
-    assert.equals(2, #requests)
-    assert.equals("stale", eval.snapshot(buf).status)
-    eval.evaluate()
-    assert.equals("測定文書", vim.json.decode(requests[3].body).state.text)
     assert.equals(3, #requests)
+    assert.equals("測試文書", vim.json.decode(requests[3].body).state.text)
+    assert.is_true(eval.view().visible)
+    -- Accept while the initial automatic evaluation is still pending.
+    require("ai-polish.popup")._actions.accept()
+    assert.equals(4, #requests)
+    assert.equals("測定文書", vim.json.decode(requests[4].body).state.text)
+    callbacks[3](reply(requests[3]))
+    assert.equals("loading", eval.snapshot(buf).status)
+    callbacks[4](reply(requests[4]))
+    assert.equals("ready", eval.snapshot(buf).status)
+    assert.equals("測定文書", eval.get(buf).text)
+  end)
+  it("automatically shows evaluation even when proofreading finds no issues", function()
+    polish.proofread()
+    callbacks[1]({
+      status = 200,
+      body = vim.json.encode({
+        candidates = {
+          { content = { parts = { { text = '{"suggestions":[]}' } } }, finishReason = "STOP" },
+        },
+      }),
+    })
+    assert.equals(2, #requests)
+    assert.is_truthy(requests[2].url:find("api.typesafe.ai", 1, true))
+    callbacks[2](reply(requests[2]))
+    panel.refresh()
+    assert.is_true(panel.is_open())
+    assert.equals("ready", eval.snapshot(buf).status)
+  end)
+  it("skips automatic checks beyond character/request budgets without confirmation", function()
+    local old = polish._confirm
+    local confirmations = 0
+    polish._confirm = function()
+      confirmations = confirmations + 1
+      return true
+    end
+    polish.setup({ evaluation = { api_key = "test", auto_max_chars = 3 } })
+    eval.evaluate({ bufnr = buf, whole = true, automatic = true, show = true })
+    assert.equals(0, #requests)
+    polish.setup({ evaluation = { api_key = "test" }, guard = { confirm_requests = 0 } })
+    eval.evaluate({ bufnr = buf, whole = true, automatic = true, show = true })
+    assert.equals(0, #requests)
+    assert.equals(0, confirmations)
+    polish._confirm = old
+    -- The manual route remains available above the automatic size threshold.
+    polish.setup({ evaluation = { api_key = "test", auto_max_chars = 3 } })
+    eval.evaluate({ whole = true })
+    assert.equals(1, #requests)
+  end)
+  it("does not resolve passive key callbacks or display UI without a key", function()
+    local calls = 0
+    polish.setup({
+      evaluation = {
+        api_key = function()
+          calls = calls + 1
+          return "test"
+        end,
+      },
+    })
+    eval.evaluate({ bufnr = buf, whole = true, automatic = true, show = true })
+    assert.equals(0, calls)
+    assert.equals(0, #requests)
+    assert.is_false(panel.is_open())
+    polish.setup({ evaluation = { api_key = "test", enabled = false } })
+    eval.evaluate({ bufnr = buf, whole = true, automatic = true, show = true })
+    assert.equals(0, #requests)
+  end)
+  it("reevaluates each accept, once for accept-all, never for rejection or stale edits", function()
+    local sessions = require("ai-polish.session")
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "a b c" })
+    local items = {}
+    for i, letter in ipairs({ "a", "b", "c" }) do
+      items[i] = {
+        row = 0,
+        col = (i - 1) * 2,
+        end_row = 0,
+        end_col = (i - 1) * 2 + 1,
+        before = letter,
+        after = { letter:upper() },
+        severity = "warning",
+      }
+    end
+    local s = sessions.create(buf, items, { whole = true })
+    s:accept()
+    assert.equals("A b c", vim.json.decode(requests[1].body).state.text)
+    s:accept()
+    assert.equals("A B c", vim.json.decode(requests[2].body).state.text)
+    s:reject()
+    assert.equals(2, #requests)
+    eval.cancel(buf)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "a b c" })
+    s = sessions.create(buf, items, { range = { 0, 0, 0, 5 } })
+    s:accept_all()
+    assert.equals(3, #requests)
+    assert.equals("A B C", vim.json.decode(requests[3].body).state.text)
+    callbacks[3](reply(requests[3]))
+    assert.equals("ready", eval.snapshot(buf).status)
+    -- An unsuccessful adoption sends nothing.
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "a b c" })
+    s = sessions.create(buf, items, { whole = true })
+    vim.api.nvim_buf_set_text(buf, 0, 0, 0, 1, { "z" })
+    assert.is_false(s:accept())
+    assert.equals(3, #requests)
+  end)
+  it("keeps a manually hidden panel hidden during acceptance evaluation", function()
+    eval.evaluate({ whole = true, automatic = true, show = true })
+    eval.toggle()
+    vim.api.nvim_buf_set_text(buf, 0, 0, 0, 6, { "new" })
+    eval.evaluate({ whole = true, automatic = true })
+    callbacks[2](reply(requests[2]))
+    panel.refresh()
+    assert.equals(2, #requests)
+    assert.is_false(panel.is_open())
+  end)
+  it("does not cancel manual evaluation when automatic checks are disabled", function()
+    polish.setup({ evaluation = { api_key = "test", auto_max_chars = 0 } })
+    eval.evaluate({ whole = true })
+    eval.evaluate({ whole = true, automatic = true, show = true })
+    assert.equals(1, #requests)
+    assert.equals(0, cancelled)
+    callbacks[1](reply(requests[1]))
+    assert.equals("ready", eval.snapshot(buf).status)
   end)
   it("refuses excess text, disabled evaluation and declined TypeSafe confirmation", function()
     polish.setup({ evaluation = { api_key = "test", max_chars = 3 } })

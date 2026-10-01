@@ -24,13 +24,14 @@ M.defaults = {
   -- Extra instructions appended to the system prompt (style guide, terminology, ...).
   instructions = nil,
 
-  -- Optional Jev evaluation: manual requests only. No key = no additional UI.
+  -- Optional Jev evaluation; bounded automatic checks after proofreading/acceptance.
   evaluation = {
     enabled = true,
     api_key = nil, -- string/callback, otherwise $TYPESAFE_API_KEY
     model = "jev-latest",
     timeout_ms = 20000,
     max_chars = 12000,
+    auto_max_chars = 3000, -- 0 disables automatic checks; also limited to two requests
     language = "auto", -- source text hint; independent of UI locale
     panel_width = 30, -- 30..60 cells; compact two-row display by default
     uncertainty_threshold = 0.5, -- presentation heuristic, not calibrated accuracy
@@ -108,6 +109,14 @@ local function validate(opts)
   vim.validate("evaluation.enabled", ev.enabled, "boolean")
   vim.validate("evaluation.api_key", ev.api_key, { "string", "function" }, true)
   vim.validate("evaluation.model", ev.model, "string")
+  if
+    type(ev.auto_max_chars) ~= "number"
+    or ev.auto_max_chars < 0
+    or ev.auto_max_chars == math.huge
+    or ev.auto_max_chars ~= ev.auto_max_chars
+  then
+    error("ai-polish: evaluation.auto_max_chars must be a finite non-negative number")
+  end
   for _, name in ipairs({ "timeout_ms", "max_chars", "uncertainty_threshold" }) do
     local v = ev[name]
     if type(v) ~= "number" or v ~= v or v == math.huge or v <= 0 then

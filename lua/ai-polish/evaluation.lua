@@ -1,4 +1,5 @@
--- Manual-only controller: observers invalidate/render, never issue HTTP requests.
+-- Only explicit evaluation and bounded proofreading/acceptance hooks send requests.
+-- Observers invalidate/render, never issue HTTP requests.
 local config = require("ai-polish.config")
 local target = require("ai-polish.evaluation_target")
 local jev = require("ai-polish.jev")
@@ -127,6 +128,32 @@ function M.evaluate(opts)
   if not buf then
     return M.notify("invalid_target")
   end
+  if opts.automatic then
+    -- Passive events never unlock an interactive key callback. An explicit Jev
+    -- action can resolve/cache it first; environment/string keys work immediately.
+    if not config.evaluation_available() or config.options.evaluation.auto_max_chars == 0 or not panel().fits() then
+      return
+    end
+    M.cancel(buf) -- superseded results must not win, even when the new text is too large
+    local auto_range = opts.range or (opts.whole and target.whole(buf))
+    if not auto_range then
+      return
+    end
+    local content = target.read(buf, auto_range)
+    local limit = math.min(
+      config.options.evaluation.auto_max_chars,
+      config.options.evaluation.max_chars,
+      config.options.guard.max_chars,
+      config.options.guard.confirm_chars
+    )
+    if not content or vim.trim(content) == "" or limit == 0 or vim.fn.strchars(content) > limit then
+      return
+    end
+    opts.planned = jev.plan(content)
+    if #opts.planned.batches > math.min(2, config.options.guard.confirm_requests) then
+      return
+    end
+  end
   local key, err = config.evaluation_key()
   if not key then
     panel().close()
@@ -154,7 +181,9 @@ function M.evaluate(opts)
     s = { target = target.set(buf, range, kind) }
     M.states[buf] = s
   end
-  M.view().visible = true
+  if not opts.automatic or (opts.show and M.source() == buf) then
+    M.view().visible = true
+  end
   observe(buf)
   range = target.range(buf, s.target)
   if not range then
@@ -172,7 +201,7 @@ function M.evaluate(opts)
     panel().refresh()
     return
   end
-  local planned = jev.plan(content)
+  local planned = opts.planned or jev.plan(content)
   if
     vim.fn.strchars(content) > config.options.guard.confirm_chars
     or #planned.batches > config.options.guard.confirm_requests

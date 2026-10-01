@@ -188,7 +188,7 @@ Set `TYPESAFE_API_KEY` locally, or supply `evaluation.api_key` (a string or a fu
 
 The non-focusable bottom-right panel defaults to 30 cells, with separate unnaturalness and AI-style rows. Filled cells mean stronger issues, not better writing. AI style describes mechanical or formulaic prose, **not the probability that AI wrote it**. Details show local findings and coverage for unnaturalness; AI style retains its distribution and separate confidence.
 
-Only explicit evaluation sends text to [TypeSafe](https://docs.typesafe.ai/api), using local sentence/phrase Noul checks for unnaturalness and whole-text Score for AI style. Short texts fit in one request; long texts use up to 60 questions per batch, four concurrent requests and 16 requests total. Partial local coverage is explicitly marked. Japanese segmentation, bounded kana references and a narrow subject-predicate rule follow [Kotobae #41](https://github.com/umiyosh/kotobae/pull/41) / [#44](https://github.com/umiyosh/kotobae/pull/44). Chinese uses punctuation clauses without Japanese rules or script conversion; non-Japanese thresholds remain provisional. Typing, pasting, saving, accepting/rejecting suggestions, switching buffers, and toggling the panel send **nothing** to Jev. Editing shows the previous result and an evaluation hint. A selection is tracked through edits; Normal-mode evaluation follows it instead of silently widening to the buffer. A deleted range must be selected again. Hiding the panel does not cancel a request or reopen it on completion.
+Explicit evaluation and bounded checks after successful Gemini proofreading or accepted corrections send text to [TypeSafe](https://docs.typesafe.ai/api), using local sentence/phrase Noul checks for unnaturalness and whole-text Score for AI style. Short texts fit in one request; long texts use up to 60 questions per batch, four concurrent requests and 16 requests total. Partial local coverage is explicitly marked. Japanese segmentation, bounded kana references and a narrow subject-predicate rule follow [Kotobae #41](https://github.com/umiyosh/kotobae/pull/41) / [#44](https://github.com/umiyosh/kotobae/pull/44). Chinese uses punctuation clauses without Japanese rules or script conversion; non-Japanese thresholds remain provisional. With a configured key, successful proofreading (including no findings) shows the evaluation panel. Each successful acceptance reevaluates the proofreading target; accept-all evaluates once after the complete edit. In-flight evaluations are cancelled and superseded, so late results cannot overwrite newer text. A manually hidden panel stays hidden during acceptance. Typing, pasting, saving, rejecting suggestions, switching buffers, and toggling the panel send **nothing** to Jev. Editing shows the previous result and an evaluation hint. A selection is tracked through edits; Normal-mode evaluation follows it instead of silently widening to the buffer. A deleted range must be selected again. Hiding the panel does not cancel a request or reopen it on completion.
 
 ```lua
 evaluation = {
@@ -196,14 +196,17 @@ evaluation = {
   api_key = nil,                -- optional; nil uses $TYPESAFE_API_KEY
   model = "jev-latest",
   timeout_ms = 20000,
-  max_chars = 12000,            -- Unicode characters; refuse rather than truncate
+  max_chars = 12000,
+  auto_max_chars = 3000,       -- automatic checks only; 0 disables them            -- Unicode characters; refuse rather than truncate
   language = "auto",            -- source hint: auto/en/ja/zh-Hans/zh-Hant
   panel_width = 30,             -- 30..60; 60 permits two axes on one row if they fit
   uncertainty_threshold = 0.5,  -- display cue only; not calibrated accuracy
 },
 ```
 
-The smaller of `evaluation.max_chars` and `guard.max_chars` applies. Above `guard.confirm_chars` or `guard.confirm_requests`, confirmation names TypeSafe, the planned request count and local coverage. Jev batches are **never automatically retried**, including 429/529; press evaluation again to retry. One failed batch fails the entire evaluation. The 12,000-character cap is a conservative client limit, not a claim about the provider's maximum. Gemini's existing guards and retry policy remain separate.
+Automatic checks require a nonempty target no larger than `evaluation.auto_max_chars` (default 3,000 characters), `evaluation.max_chars`, `guard.max_chars`, and `guard.confirm_chars`, and at most two planned Jev requests (also bounded by `guard.confirm_requests`). Larger targets are skipped without a prompt; explicit evaluation remains available. Automatic checks do not invoke an interactive key callback: resolve it once with an explicit evaluation/health check, or use an environment/string key.
+
+The smaller of `evaluation.max_chars` and `guard.max_chars` applies to explicit evaluation. Above `guard.confirm_chars` or `guard.confirm_requests`, confirmation names TypeSafe, the planned request count and local coverage. Jev batches are **never automatically retried**, including 429/529; press evaluation again to retry. One failed batch fails the entire evaluation. The 12,000-character cap is a conservative client limit, not a claim about the provider's maximum. Gemini's existing guards and retry policy remain separate.
 
 Theme groups: `AiPolishEvalLow` (DiagnosticOk), `AiPolishEvalMid` (DiagnosticWarn), `AiPolishEvalHigh` (bold warning color), `AiPolishEvalLabel`/`Stale` (NormalFloat), `AiPolishEvalError` (DiagnosticWarn). No added font dependency. Panels hide on unrelated special buffers or overlap with the correction popup, and Gemini progress stacks above them.
 

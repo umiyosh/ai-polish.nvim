@@ -41,9 +41,10 @@ end
 
 describe("proofreading flow", function()
   local orig_post, orig_confirm, orig_notify = http.post, polish._confirm, vim.notify
-  local requests, reply, messages
+  local requests, reply, messages, jev_env
 
   before_each(function()
+    jev_env, vim.env.TYPESAFE_API_KEY = vim.env.TYPESAFE_API_KEY, nil
     polish.setup({ api_key = "k" })
     requests, messages = {}, {}
     reply = function()
@@ -65,6 +66,7 @@ describe("proofreading flow", function()
   after_each(function()
     popup.close()
     http.post, polish._confirm, vim.notify = orig_post, orig_confirm, orig_notify
+    vim.env.TYPESAFE_API_KEY = jev_env
   end)
 
   local function wait_idle()
