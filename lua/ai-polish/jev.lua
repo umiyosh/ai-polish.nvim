@@ -3,8 +3,9 @@ local config = require("ai-polish.config")
 local http = require("ai-polish.http")
 local M = {}
 M.axes = { "unnaturalness", "ai_style" }
-M.rubric_version = 2
+M.rubric_version = 3
 local local_check = require("ai-polish.jev_local")
+local refine = require("ai-polish.jev_refine")
 M.questions = {
   unnaturalness = {
     type = "score",
@@ -93,7 +94,8 @@ function M.decode(body)
         best, level = p, i + 1
       end
     end
-    if math.abs(sum - 1) > 0.001 then
+    -- Jev rounds each probability; about 1% of real answers drift up to 0.01. Same bound as Kotobae.
+    if math.abs(sum - 1) > 0.025 then
       return nil, "invalid_response"
     end
     result[id] = { level = level, confidence = a.confidence, probabilities = probabilities }
@@ -109,6 +111,8 @@ end
 function M.evaluate(content, key, callback, planned)
   local opts = vim.deepcopy(config.options.evaluation)
   local plan = planned or M.plan(content)
+  -- Japanese refinement requests ride along with the local check; see jev_refine.
+  local batches = vim.list_extend(vim.list_extend({}, plan.batches), plan.extra_batches or {})
   local jobs, answers, next_index, active, completed, stopped = {}, {}, 1, 0, 0, false
   local function cancel()
     stopped = true
@@ -127,9 +131,9 @@ function M.evaluate(content, key, callback, planned)
   end
   local pump
   pump = function()
-    while not stopped and active < 4 and next_index <= #plan.batches do
+    while not stopped and active < 4 and next_index <= #batches do
       local index = next_index
-      local batch = plan.batches[index]
+      local batch = batches[index]
       next_index, active = next_index + 1, active + 1
       local done = false
       local ok, handle = pcall(http.post, {
@@ -171,7 +175,7 @@ function M.evaluate(content, key, callback, planned)
           answers[id] = a
         end
         completed = completed + 1
-        if completed == #plan.batches then
+        if completed == #batches then
           local result, err = M.decode(vim.json.encode({ answers = answers }))
           if not result then
             return fail(err)
@@ -181,6 +185,9 @@ function M.evaluate(content, key, callback, planned)
             return fail("invalid_response")
           end
           result.unnaturalness = checked -- Do not attach the unrelated Score distribution/confidence.
+          if plan.language == "ja" then
+            result.ai_style.level = refine.ai_style_level(result.ai_style.level, answers)
+          end
           stopped = true
           callback(result)
         else
