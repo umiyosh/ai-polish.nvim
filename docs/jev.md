@@ -58,6 +58,18 @@ The demo uses the worktree's runtime path, not an installed plugin copy. `:lua p
 
 The endpoint is fixed; private header-file transport and cleanup remain. Only target text and a language hint are sent, never Gemini suggestions, filenames or neighboring text. Unknown/malformed is not level 1. AI style is not an authorship classifier. The exact Japanese contract is in `lua/ai-polish/jev_ja.json`; translated/local adaptation and aggregation are in `jev_local.lua`.
 
+## Rubric v3: levels 4–5 for Japanese (2026-10-04)
+
+Ports [Kotobae #51](https://github.com/umiyosh/kotobae/pull/51) ([#49](https://github.com/umiyosh/kotobae/issues/49)). Kotobae built an evaluator that scores Jev against injected-error gold levels and found that levels 4–5 were almost never used: the local check stops at 3 and Score argmax stays near the middle. Japanese only, because the added questions were measured on Japanese text; Chinese and English keep rubric v2.
+
+- **Unnaturalness:** whether a text needs correction (level 3) is unchanged. Only texts already at 3 or above are raised, by how much correction they need. A per-sentence Noul asks whether the sentence needs restructuring rather than a word replacement (`u_t{i}`, structural at ≥0.6). Two sentences with critical errors or one structural break give 4; critical errors in ≥3 sentences and ≥30% of them, two structural breaks, or one structural break plus two erroneous sentences give 5. Only sentences at ≥0.48 count toward 4–5, so borderline false alarms at 3 are not escalated.
+- **AI style:** when the Score level is ≥2, each paragraph (or sentence for a single paragraph) gets Nouls for decorative formatting, stock wording and formulaic structure, plus one Noul for whether the text lacks concrete content. Coverage (≥0.8 per feature) gives 5 at ≥80% without concrete content, 4 at ≥50% with two kinds, 3 at ≥25% or two kinds, else 2. The larger of this and the Score level is shown; it never lowers the Score level.
+- **Requests:** structure and style questions travel in separate requests (`plan.extra_batches`) so the calibrated local-check requests keep their packing and state. Automatic evaluation still counts only local-check requests against its two-request limit; the confirmation prompt shows the total. A short text adds two requests; a long single-paragraph text adds one style request per ~20 sentences.
+- **Guide text:** the Japanese level guide describes the amount of correction, and level 5 is 「大幅な手直し」 instead of an unreadable text, which real input almost never is. Other UI languages keep their wording; their texts keep rubric v2 levels.
+- **Score validation:** probability sums may drift up to 0.025 (Kotobae's bound). About 1% of 8,538 real Score answers drifted up to 0.01 and previously failed as `invalid_response`.
+
+Validation: Kotobae's saved Jev responses fed through this implementation reproduce Kotobae's levels for all 225 runs (74 fresh texts × 3 and the user report × 3). On the fresh texts Kotobae measured unnaturalness QWK 0.466→0.672, level 4–5 recall 0→0.50, correction F1 0.849→0.850 and AI style QWK 0.593→0.832. Live runs here (3 each): a templated advertisement gave AI style 5/5/5; a text with errors in a third of its sentences gave unnaturalness 4/3/3 and the user report 3/4/3 — Jev answers vary between calls near the thresholds. Known limit: a correct draft can still show 3 (Kotobae #50 was closed; real reports drive further tuning).
+
 ## Validation boundary (2026-10-02)
 
 - Local `make check`: 91 tests, including 165 upstream golden cases, threshold boundaries, kana reference bounds, Chinese segmentation/script preservation, partial coverage, parallel batches, cancellation, malformed responses and evidence UI. No API keys required.

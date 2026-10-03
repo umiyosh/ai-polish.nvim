@@ -27,6 +27,14 @@ describe("Jev boundary", function()
     assert.equals(0.25, result.unnaturalness.confidence)
     assert.equals(0.5, result.unnaturalness.probabilities[3])
   end)
+  it("accepts the rounding drift Jev returns but rejects a broken distribution", function()
+    -- About 1% of real Score answers sum to 1 +- 0.01 (measured on 8,538 answers).
+    local r = response()
+    r.answers.unnaturalness.probabilities["4"] = 0.01
+    assert.is_not_nil(jev.decode(vim.json.encode(r)))
+    r.answers.unnaturalness.probabilities["4"] = 0.03
+    assert.is_nil(jev.decode(vim.json.encode(r)))
+  end)
   it("rejects missing answers, incomplete distributions and non-finite/out-of-range values", function()
     assert.is_nil(jev.decode("{}"))
     for _, change in ipairs({
