@@ -1,5 +1,6 @@
 -- Local Noul aggregation from Kotobae #44. No Gemini evidence enters this path.
 local segment = require("ai-polish.jev_segment")
+local refine = require("ai-polish.jev_refine")
 local path = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h") .. "/jev_ja.json"
 local ja = vim.json.decode(table.concat(vim.fn.readfile(path), "\n"))
 local M = { ja = ja.scores, limits = ja.local_check }
@@ -90,10 +91,17 @@ function M.plan(content, hint, scores)
     end
     count, evaluated = count + size, i
   end
-  return { batches = batches, sentences = sentences, evaluated = evaluated, language = language }
+  local planned = { batches = batches, sentences = sentences, evaluated = evaluated, language = language }
+  planned.extra_batches = {}
+  if language == "ja" then
+    local max = M.limits.maxQuestionsPerRequest
+    vim.list_extend(planned.extra_batches, refine.structure_batches(content, planned, hint, max))
+    vim.list_extend(planned.extra_batches, refine.style_batches(content, planned, hint, max))
+  end
+  return planned
 end
 function M.aggregate(plan, answers, score_level)
-  local findings, value, omitted = {}, 0, 0
+  local findings, value, omitted, values = {}, 0, 0, {}
   local function error_probability(key)
     local a = answers[key]
     if
@@ -125,7 +133,7 @@ function M.aggregate(plan, answers, score_level)
       end
     end
     local v = s.nejire and 1 or (whole + worst) / 2
-    value, omitted = math.max(value, v), omitted + s.omitted_spans
+    value, omitted, values[i] = math.max(value, v), omitted + s.omitted_spans, v
     if v >= M.limits.mildThreshold then
       findings[#findings + 1] = {
         kind = s.nejire and "structure" or "phrase",
@@ -139,6 +147,9 @@ function M.aggregate(plan, answers, score_level)
   local level = value >= M.limits.correctionThreshold and 3 or (value >= M.limits.mildThreshold and 2 or 1)
   if score_level >= 4 and value >= M.limits.mildThreshold then
     level = score_level
+  end
+  if plan.language == "ja" and level >= 3 then
+    level = math.max(level, refine.extent_level(values, answers))
   end
   table.sort(findings, function(a, b)
     return a.value > b.value or (a.value == b.value and a.index < b.index)

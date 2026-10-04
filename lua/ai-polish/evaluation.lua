@@ -226,7 +226,12 @@ function M.evaluate(opts)
     local msg = (
       "Evaluate a %d-character target with TypeSafe (Jev) using %d requests? "
       .. "Excerpts repeat across questions. Local units: %d/%d."
-    ):format(vim.fn.strchars(content), #planned.batches, planned.evaluated, #planned.sentences)
+    ):format(
+      vim.fn.strchars(content),
+      #planned.batches + #(planned.extra_batches or {}),
+      planned.evaluated,
+      #planned.sentences
+    )
     if not require("ai-polish")._confirm(msg) then
       return
     end
