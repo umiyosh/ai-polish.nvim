@@ -23,6 +23,28 @@ Many AI writing tools rewrite the selection and leave you to compare the new tex
 - **Stays in the buffer.** No chat panel or side window. The popup opens at the text in question.
 - **No surprise requests.** Size and cost are estimated locally, and large requests need your confirmation ([Large documents](#large-documents)).
 
+## Why Gemini 3.8 Flash and Jev?
+
+### Gemini 3.8 Flash
+
+Gemini 3.8 Flash is the default model because it combines strong writing quality with fast responses.
+
+- **Writing quality.** As its reputation suggests, it constructs language well and is especially strong at generating Japanese. Its suggestions and replacements are good enough to accept as they are.
+- **Speed.** It responds fast enough to proofread inside the editor without breaking your flow.
+
+We also evaluated OpenAI models. They did not reach this speed, and their proofreading quality was lower, so we did not adopt them.
+
+It is also cheap: one proofreading pass costs about ¥0.3. The author is a heavy user who runs nearly everything they write through proofreading, about 70 passes a day, and a month still costs about:
+
+- ¥660 at the current introductory rate (through the end of 2026)
+- ¥1,300 at the standard rate from 2027
+
+### Jev (optional)
+
+Jev returns a reasonable text evaluation and an AI-style assessment with very low latency, at a low cost. That makes it a good first step to decide whether another proofreading pass is worthwhile.
+
+With the same usage, about 90 evaluations a day, a month costs about $0.72.
+
 ## Requirements
 
 - Neovim 0.11+
