@@ -16,6 +16,12 @@ local function answers(plan, noul)
 end
 local function response(req, noul)
   local result = answers({ batches = { vim.json.decode(req.body) } }, noul)
+  -- Structure and style questions ask whether a problem exists, so a clean answer is low.
+  for id, a in pairs(result) do
+    if id:match("^u_t") or id:match("^a") then
+      a.noul = 1 - noul
+    end
+  end
   for id, q in pairs(vim.json.decode(req.body).questions) do
     if q.type == "score" then
       result[id] = {
@@ -127,6 +133,13 @@ describe("Jev local checks", function()
     callbacks[2](response(requests[2], 0.6))
     assert.equals(5, #requests)
     for _, i in ipairs({ 5, 4, 3, 1 }) do
+      callbacks[i](response(requests[i], 0.6))
+    end
+    -- Japanese refinement requests follow the local check; answer them in order.
+    for i = 6, 64 do
+      if result or not callbacks[i] then
+        break
+      end
       callbacks[i](response(requests[i], 0.6))
     end
     assert.equals(3, result.unnaturalness.level)
