@@ -34,7 +34,7 @@ Gemini 3.8 Flash is the default model because it combines strong writing quality
 
 We also evaluated OpenAI models. They did not reach this speed, and their proofreading quality was lower, so we did not adopt them.
 
-It is also cheap. The author is a heavy user who runs nearly everything they write through proofreading, and a month still costs about:
+It is also cheap: one proofreading pass costs about ¥0.3. The author is a heavy user who runs nearly everything they write through proofreading, about 70 passes a day, and a month still costs about:
 
 - ¥660 at the current introductory rate (through the end of 2026)
 - ¥1,300 at the standard rate from 2027
@@ -43,7 +43,7 @@ It is also cheap. The author is a heavy user who runs nearly everything they wri
 
 Jev returns a reasonable text evaluation and an AI-style assessment with very low latency, at a low cost. That makes it a good first step to decide whether another proofreading pass is worthwhile.
 
-With the same usage, a month costs about $0.72.
+With the same usage, about 90 evaluations a day, a month costs about $0.72.
 
 ## Requirements
 
