@@ -18,7 +18,7 @@ Run `:AiPolish` on a visual selection or the whole buffer. Gemini's findings sho
 Many AI writing tools rewrite the selection and leave you to compare the new text with the old. ai-polish.nvim uses the model as a reviewer instead.
 
 - **Small, separate fixes.** Gemini is asked for the minimal span to change, one fix per suggestion, never a rewritten paragraph. Each fix can be judged in a moment.
-- **You apply every change.** `a` accepts, `x` rejects, `]` / `[` move between suggestions. Each accept is one undo step.
+- **You apply every change.** `a` accepts, `x` rejects, `]` / `[` move between suggestions. Each accept is one undo step; `u` in the popup also brings the suggestion back.
 - **Safe to keep editing.** Suggestions are anchored in the buffer and re-checked against the current text before they are applied ([Design notes](#design-notes)).
 - **Stays in the buffer.** No chat panel or side window. The popup opens at the text in question.
 - **No surprise requests.** Size and cost are estimated locally, and large requests need your confirmation ([Large documents](#large-documents)).
@@ -159,6 +159,8 @@ The popup takes focus. These keys work only inside it:
 | `]` / `[` | Next / previous suggestion |
 | `A` | Accept the first candidate of every remaining suggestion (one undo step) |
 | `X` | Reject all remaining suggestions |
+| `u` | Undo the last accept: restores the text and brings the suggestion back with the chosen candidate |
+| `<C-r>` | Redo the undone accept |
 | `q` / `<Esc>` | Close. Suggestions stay; resume with `:AiPolish review` |
 
 You can keep editing while suggestions are pending. A suggestion whose text you changed is dropped rather than misapplied.
@@ -284,6 +286,7 @@ require("ai-polish").setup({
   keymaps = {
     accept = "a", reject = "x", next = "]", prev = "[",
     accept_all = "A", reject_all = "X", close = "q",
+    undo = "u", redo = "<C-r>",
   },
 })
 ```

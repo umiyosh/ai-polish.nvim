@@ -21,6 +21,8 @@ local function hint_line(keys)
     { "next", "next" },
     { "prev", "prev" },
     { "accept_all", "all" },
+    { "undo", "undo" },
+    { "redo", "redo" },
     { "close", "close" },
   }
   for _, l in ipairs(labels) do
@@ -116,7 +118,7 @@ end
 
 local open -- forward declaration
 
-local function refresh()
+local function refresh(choice)
   if not state then
     return
   end
@@ -126,7 +128,7 @@ local function refresh()
     notify("review finished")
     return
   end
-  open(session, win)
+  open(session, win, choice)
 end
 
 local function candidate_under_cursor()
@@ -173,6 +175,23 @@ function actions.reject_all()
   notify("dismissed all suggestions")
 end
 
+local function undo_redo(method)
+  local ok, result = state.session[method](state.session)
+  if not ok then
+    notify(result, vim.log.levels.WARN)
+    return
+  end
+  refresh(type(result) == "number" and result or nil)
+end
+
+function actions.undo()
+  undo_redo("undo")
+end
+
+function actions.redo()
+  undo_redo("redo")
+end
+
 function actions.close()
   M.close()
 end
@@ -195,6 +214,8 @@ local function set_keymaps(buf)
   map(keys.prev, actions.prev, "previous suggestion")
   map(keys.accept_all, actions.accept_all, "accept all suggestions")
   map(keys.reject_all, actions.reject_all, "reject all suggestions")
+  map(keys.undo, actions.undo, "undo the last accept")
+  map(keys.redo, actions.redo, "redo the undone accept")
   map(keys.close, actions.close, "close popup")
   map("<Esc>", actions.close, "close popup")
   for i = 1, 3 do
@@ -206,7 +227,8 @@ end
 
 ---@param session AiPolishSession
 ---@param source_win integer
-open = function(session, source_win)
+---@param choice integer|nil candidate to put the cursor on (default 1)
+open = function(session, source_win, choice)
   session:prune()
   if #session.items == 0 then
     M.close()
@@ -289,9 +311,9 @@ open = function(session, source_win)
   end
 
   state = { win = win, buf = buf, source_win = source_win, session = session, candidate_rows = rows }
-  -- Put the cursor on the first candidate so <CR> / accept picks it.
+  -- Put the cursor on the candidate so <CR> / accept picks it: the first, or the one an undo restored.
   for r, n in pairs(rows) do
-    if n == 1 then
+    if n == (choice or 1) then
       vim.api.nvim_win_set_cursor(win, { r, 0 })
     end
   end
