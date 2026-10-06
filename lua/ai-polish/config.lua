@@ -81,6 +81,8 @@ M.defaults = {
     accept_all = "A",
     reject_all = "X",
     close = "q",
+    undo = "u",
+    redo = "<C-r>",
   },
 }
 

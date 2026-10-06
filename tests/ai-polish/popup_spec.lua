@@ -48,6 +48,33 @@ describe("popup", function()
     assert.equals(25, vim.wo[vim.api.nvim_get_current_win()].winblend)
   end)
 
+  it("undoes and redoes an accept with u and <C-r>", function()
+    local win, buf = setup_window({ "teh colour" }, 60)
+    local colour = item("colour", 0, 4)
+    colour.after = { "color", "hue" }
+    popup.open(session.create(buf, { item("teh", 0, 0), colour }), win)
+    vim.cmd("normal ]")
+    vim.cmd("normal 2")
+    assert.same({ "teh hue" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+
+    vim.cmd("normal u")
+    assert.same({ "teh colour" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    local ctx = popup.context()
+    assert.equals("colour", ctx.session:current().before)
+    -- The cursor returns to the candidate that was accepted.
+    assert.equals(2, ctx.candidate_rows[vim.api.nvim_win_get_cursor(ctx.win)[1]])
+
+    vim.cmd("normal " .. vim.keycode("<C-r>"))
+    assert.same({ "teh hue" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    assert.equals("teh", popup.context().session:current().before)
+  end)
+
+  it("lists undo and redo in the hint line", function()
+    local _, buf = setup_window({ "teh" }, 60)
+    local lines = popup.render_lines(session.create(buf, { item("teh", 0, 0) }), 60)
+    assert.matches("u undo  <C%-r> redo", lines[#lines])
+  end)
+
   it("opens below the last screen row of a wrapped line", function()
     local long = string.rep("word ", 40) -- 200 cols
     local win = setup_window({ long, "next" }, 50)

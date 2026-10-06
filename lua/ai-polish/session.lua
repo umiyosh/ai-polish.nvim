@@ -20,6 +20,9 @@ local sessions = {}
 ---@field bufnr integer
 ---@field items table[]
 ---@field index integer
+---@field past table[] accepted steps, newest last
+---@field future table[] undone steps, newest last
+---@field changedtick integer|nil changedtick after the last accept, undo, or redo
 local Session = {}
 Session.__index = Session
 
@@ -27,12 +30,25 @@ local function hl_for(item, current)
   return current and "AiPolishCurrent" or (SEVERITY_HL[item.severity] or "AiPolishSuggestion")
 end
 
+local function mark_opts(item, current, range)
+  return {
+    id = range and item.mark or nil,
+    end_row = range and range[3] or item.end_row,
+    end_col = range and range[4] or item.end_col,
+    hl_group = hl_for(item, current),
+    right_gravity = false,
+    end_right_gravity = true,
+    invalidate = true,
+    priority = current and 200 or 150,
+  }
+end
+
 ---@param bufnr integer
 ---@param items table[] each with row, col, end_row, end_col (0-based, end-exclusive) + suggestion fields
 ---@return AiPolishSession
 function M.create(bufnr, items, evaluation)
   M.clear(bufnr)
-  local self = setmetatable({ bufnr = bufnr, items = {}, index = 1 }, Session)
+  local self = setmetatable({ bufnr = bufnr, items = {}, index = 1, past = {}, future = {} }, Session)
   if evaluation then
     self.evaluation = { whole = evaluation.whole }
     if not evaluation.whole then
@@ -46,15 +62,7 @@ function M.create(bufnr, items, evaluation)
     end
   end
   for _, it in ipairs(items) do
-    local ok, id = pcall(vim.api.nvim_buf_set_extmark, bufnr, M.ns, it.row, it.col, {
-      end_row = it.end_row,
-      end_col = it.end_col,
-      hl_group = hl_for(it, false),
-      right_gravity = false,
-      end_right_gravity = true,
-      invalidate = true,
-      priority = 150,
-    })
+    local ok, id = pcall(vim.api.nvim_buf_set_extmark, bufnr, M.ns, it.row, it.col, mark_opts(it, false))
     if ok then
       self.items[#self.items + 1] = vim.tbl_extend("force", it, { mark = id })
     end
@@ -97,16 +105,13 @@ function Session:render()
   for i, it in ipairs(self.items) do
     local row, col, end_row, end_col = self:range(it)
     if row then
-      vim.api.nvim_buf_set_extmark(self.bufnr, M.ns, row, col, {
-        id = it.mark,
-        end_row = end_row,
-        end_col = end_col,
-        hl_group = hl_for(it, i == self.index),
-        right_gravity = false,
-        end_right_gravity = true,
-        invalidate = true,
-        priority = i == self.index and 200 or 150,
-      })
+      vim.api.nvim_buf_set_extmark(
+        self.bufnr,
+        M.ns,
+        row,
+        col,
+        mark_opts(it, i == self.index, { row, col, end_row, end_col })
+      )
     end
   end
 end
@@ -178,13 +183,95 @@ function Session:accept(n)
     return false, "no such candidate"
   end
   self:undo_break()
+  local index, range, seq = self.index, { self:range(item) }, self:seq()
   local ok, err = self:apply(item, replacement)
   -- A stale suggestion can never be applied; drop it either way.
   self:remove(self.index)
   if ok then
+    local saved = vim.tbl_extend("force", item, { mark = false })
+    self.past[#self.past + 1] = {
+      item = saved,
+      index = index,
+      choice = n or 1,
+      range = range,
+      before = seq,
+      after = self:seq(),
+    }
+    self.future = {}
+    self.changedtick = self:tick()
     self:evaluate()
   end
   return ok, err
+end
+
+-- Edits joined into the accept's undo block leave seq_cur unchanged; changedtick does not.
+function Session:tick()
+  return vim.api.nvim_buf_get_changedtick(self.bufnr)
+end
+
+function Session:seq()
+  return vim.api.nvim_buf_call(self.bufnr, function()
+    return vim.fn.undotree().seq_cur
+  end)
+end
+
+-- Jump to an exact undo state so a redo cannot follow another branch of the tree.
+function Session:undo_to(seq)
+  vim.api.nvim_buf_call(self.bufnr, function()
+    vim.cmd("silent undo " .. seq)
+  end)
+end
+
+---Undo the latest accept: restore its text and put the suggestion back in the review.
+---Refuses when the buffer was edited since, because the undo would revert that edit too.
+---@return boolean ok, integer|string choice_or_err candidate accepted, or why nothing happened
+function Session:undo()
+  local step = self.past[#self.past]
+  if not step then
+    return false, "nothing to undo"
+  end
+  if self:tick() ~= self.changedtick then
+    return false, "the buffer changed since the suggestion was accepted"
+  end
+  self:undo_to(step.before)
+  self.changedtick = self:tick()
+  local r = step.range
+  local item = vim.tbl_extend("force", step.item, { row = r[1], col = r[2], end_row = r[3], end_col = r[4] })
+  item.mark = vim.api.nvim_buf_set_extmark(self.bufnr, M.ns, r[1], r[2], mark_opts(item, false))
+  step.restored = item
+  table.remove(self.past)
+  self.future[#self.future + 1] = step
+  self.index = math.min(step.index, #self.items + 1)
+  table.insert(self.items, self.index, item)
+  sessions[self.bufnr] = self
+  self:render()
+  self:evaluate()
+  return true, step.choice
+end
+
+---Redo the latest undone accept.
+---@return boolean ok, string|nil err
+function Session:redo()
+  local step = self.future[#self.future]
+  if not step then
+    return false, "nothing to redo"
+  end
+  if self:tick() ~= self.changedtick then
+    return false, "the buffer changed since the accept was undone"
+  end
+  self:undo_to(step.after)
+  self.changedtick = self:tick()
+  table.remove(self.future)
+  self.past[#self.past + 1] = step
+  for i, it in ipairs(self.items) do
+    if it == step.restored then
+      self.index = i
+      self:remove(i)
+      break
+    end
+  end
+  self:evaluate()
+  return true
 end
 
 function Session:reject()
