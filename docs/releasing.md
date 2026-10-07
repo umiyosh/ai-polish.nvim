@@ -42,7 +42,13 @@ gh run list --workflow release.yml --limit 5
 gh release view v0.1.0
 ```
 
-Review the generated English release notes on GitHub and add any migration guidance before announcing the release. For subsequent releases, replace `v0.1.0` throughout with the selected version.
+Let the workflow create the release, then edit it. Do not run `gh release create` yourself: the workflow leaves an existing release untouched, so a hand-made release would skip its generated notes. Once the release exists, review the generated English notes and rewrite them with the highlights, configuration examples, and any migration guidance before announcing the release:
+
+```sh
+gh release edit v0.1.0 --notes-file release-notes.md
+```
+
+For subsequent releases, replace `v0.1.0` throughout with the selected version.
 
 ## Verify installation
 
