@@ -227,6 +227,12 @@ evaluation = {
   language = "auto",            -- source hint: auto/en/ja/zh-Hans/zh-Hant
   panel_width = 30,             -- 30..60; 60 permits two axes on one row if they fit
   uncertainty_threshold = 0.5,  -- display cue only; not calibrated accuracy
+  marks = {                     -- early underlines while Gemini writes (Japanese)
+    enabled = true,
+    threshold = 0.6,            -- Jev's probability that a bunsetsu needs a fix
+    max_requests = 20,          -- per proofreading run; later text gets no underlines
+    in_flight = 16,
+  },
 },
 ```
 
@@ -235,6 +241,10 @@ Automatic checks require a nonempty target no larger than `evaluation.auto_max_c
 The smaller of `evaluation.max_chars` and `guard.max_chars` applies to explicit evaluation. Above `guard.confirm_chars` or `guard.confirm_requests`, confirmation names TypeSafe, the planned request count and local coverage. Jev batches are **never automatically retried**, including 429/529; press evaluation again to retry. One failed batch fails the entire evaluation. The 12,000-character cap is a conservative client limit, not a claim about the provider's maximum. Gemini's existing guards and retry policy remain separate.
 
 Theme groups: `AiPolishEvalLow` (DiagnosticOk), `AiPolishEvalMid` (DiagnosticWarn), `AiPolishEvalHigh` (bold warning color), `AiPolishEvalLabel`/`Stale` (NormalFloat), `AiPolishEvalError` (DiagnosticWarn). No added font dependency. Panels hide on unrelated special buffers or overlap with the correction popup, and Gemini progress stacks above them.
+
+### Early underlines (Japanese)
+
+With a Jev key available without prompting, proofreading Japanese text also asks Jev, alongside Gemini, which bunsetsu need a fix (one question per bunsetsu, splitting with the bundled budoux.lua). Within about half a second the places Jev marks get a red wavy underline (`AiPolishTentative`), seconds before Gemini's suggestions. Underlines move with your edits; answers about text you have since edited are dropped. When Gemini's suggestions arrive, the underlines give way to them; cancelling clears them. An explicit evaluation (`:AiPolish evaluate`) shows the same underlines and keeps them until the next proofreading or evaluation, or `:AiPolish clear`; automatic evaluations do not ask for them. The question accepts the writer's own register, so spoken or casual wording is not marked. A 3,000-character text takes about 4 requests; `evaluation.marks.max_requests` caps them per run without a prompt, apart from Gemini's guard. Unlike evaluation batches, a mark request is retried once on 429/529, and a failed one only loses its own underlines. Set `evaluation.marks.enabled = false` to turn them off.
 
 See [design and validation](docs/jev.md). Try the offline UI with `nvim -u scripts/jev-demo.lua`; its values are fixtures, not model judgments. Personal key mappings and installed plugin revisions are never changed by `setup()`.
 

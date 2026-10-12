@@ -222,4 +222,104 @@ describe("proofreading flow", function()
     assert.is_true(cancelled)
     assert.equals("", polish.status())
   end)
+
+  describe("with Jev's tentative marks", function()
+    local tentative = require("ai-polish.tentative")
+    local pending
+
+    before_each(function()
+      vim.env.TYPESAFE_API_KEY = "jev-key"
+      polish.setup({ api_key = "k", evaluation = { auto_max_chars = 0 } })
+      pending = {}
+      http.post = function(req, cb)
+        requests[#requests + 1] = req
+        pending[#pending + 1] = { req = req, cb = cb, jev = req.url:find("typesafe", 1, true) ~= nil }
+        return { cancel = function() end }
+      end
+    end)
+
+    local function marked(b)
+      return #vim.api.nvim_buf_get_extmarks(b, tentative.ns, 0, -1, {})
+    end
+
+    local function answer(jev, res)
+      for _, p in ipairs(pending) do
+        if p.jev == jev then
+          p.cb(res(p))
+        end
+      end
+    end
+
+    local function answer_jev()
+      answer(true, function(p)
+        local answers = {}
+        for k in pairs(vim.json.decode(p.req.body).questions) do
+          answers[k] = { type = "noul", noul = 0.9 }
+        end
+        return { status = 200, body = vim.json.encode({ answers = answers }) }
+      end)
+    end
+
+    it("asks Jev alongside Gemini and underlines its marks until Gemini's fixes arrive", function()
+      local b = open_buffer({ "今日わ良い天気です。" })
+      vim.cmd("AiPolish")
+      assert.equals(2, #pending)
+      answer_jev()
+      assert.is_true(marked(b) > 0)
+      answer(false, function()
+        return gemini_reply({ sug("わ", "は", "今日", "良い") })
+      end)
+      wait_idle()
+      assert.equals(0, marked(b))
+      assert.equals("AI Polish: 1", polish.status(b))
+    end)
+
+    it("clears the marks when the check is cancelled", function()
+      local b = open_buffer({ "今日わ良い天気です。" })
+      vim.cmd("AiPolish")
+      answer_jev()
+      assert.is_true(marked(b) > 0)
+      vim.cmd("AiPolish cancel")
+      assert.equals(0, marked(b))
+    end)
+
+    it("does not ask Jev about text that is not Japanese, or when marks are disabled", function()
+      open_buffer({ "teh start" })
+      vim.cmd("AiPolish")
+      assert.equals(1, #pending)
+      vim.cmd("AiPolish cancel")
+      polish.setup({ api_key = "k", evaluation = { auto_max_chars = 0, marks = { enabled = false } } })
+      open_buffer({ "今日わ良い天気です。" })
+      vim.cmd("AiPolish")
+      assert.equals(2, #pending)
+      vim.cmd("AiPolish cancel")
+    end)
+
+    local function mark_requests()
+      return vim.tbl_filter(function(p)
+        return p.jev and vim.json.decode(p.req.body).questions.e0001 ~= nil
+      end, pending)
+    end
+
+    it("underlines marks on an explicit evaluation and keeps them until cleared", function()
+      local eval = require("ai-polish.evaluation")
+      local b = open_buffer({ "今日わ良い天気です。" })
+      eval.evaluate({ bufnr = b, whole = true })
+      assert.equals(1, #mark_requests())
+      local p = mark_requests()[1]
+      p.cb({ status = 200, body = vim.json.encode({ answers = { e0001 = { type = "noul", noul = 0.9 } } }) })
+      assert.equals(1, marked(b))
+      vim.cmd("AiPolish clear")
+      assert.equals(0, marked(b))
+    end)
+
+    it("does not ask for marks on an automatic evaluation", function()
+      polish.setup({ api_key = "k" })
+      local b = open_buffer({ "今日わ良い天気です。" })
+      require("ai-polish.evaluation").evaluate({ bufnr = b, whole = true, automatic = true })
+      assert.is_true(#pending > 0)
+      assert.equals(0, #mark_requests())
+      vim.cmd("AiPolish clear")
+    end)
+  end)
 end)

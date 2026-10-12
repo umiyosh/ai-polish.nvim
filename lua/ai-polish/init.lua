@@ -4,6 +4,7 @@ local text = require("ai-polish.text")
 local session = require("ai-polish.session")
 local popup = require("ai-polish.popup")
 local progress = require("ai-polish.progress")
+local tentative = require("ai-polish.tentative")
 
 local M = {}
 
@@ -44,6 +45,11 @@ local function set_highlights()
   for group, link in pairs(links) do
     vim.api.nvim_set_hl(0, group, { link = link, default = true })
   end
+  -- Jev's tentative marks. A red wave stands out while Gemini writes; terminals that lack dotted
+  -- underlines draw it as a plain one that reads like ordinary text. Suggestions replace the
+  -- marks, so the two never show together.
+  local err = vim.api.nvim_get_hl(0, { name = "DiagnosticError", link = false })
+  vim.api.nvim_set_hl(0, "AiPolishTentative", { undercurl = true, sp = err.fg or "Red", default = true })
 end
 
 function M.setup(opts)
@@ -138,10 +144,22 @@ local function region_text(bufnr, mark)
   return table.concat(lines, "\n"), m[1], m[2]
 end
 
+---Hand Gemini's fixes to the marks. The whole answer arrives at once until streaming (#17), so
+---no mark outlives it.
+local function settle_marks(bufnr, req, fixes)
+  -- Marks a later check started (an explicit evaluation) are not this check's to clear.
+  if not req.marks or tentative.get(bufnr) ~= req.marks then
+    return
+  end
+  req.marks:reached(fixes)
+  tentative.clear(bufnr)
+end
+
 local function finish(bufnr, req, results, errors)
   local cur, row0, col0 = region_text(bufnr, req.mark)
   pcall(vim.api.nvim_buf_del_extmark, bufnr, region_ns, req.mark)
   if not cur then
+    settle_marks(bufnr, req, {})
     return notify("target text disappeared; results discarded", vim.log.levels.WARN)
   end
 
@@ -168,6 +186,7 @@ local function finish(bufnr, req, results, errors)
     local er, ec = text.pos_at(cur, s.finish, row0, col0)
     items[#items + 1] = vim.tbl_extend("force", s, { row = r, col = c, end_row = er, end_col = ec })
   end
+  settle_marks(bufnr, req, items)
 
   if #errors > 0 and #errors == #req.chunks then
     return notify("proofreading failed: " .. errors[1], vim.log.levels.ERROR)
@@ -260,6 +279,7 @@ function M.proofread(opts)
       end_right_gravity = true,
     }),
   }
+  req.marks = tentative.ask(bufnr, content, r[1], r[2])
   local spinner = progress.start(bufnr)
   local function label(done, total)
     return total > 1 and ("proofreading %d/%d…"):format(done, total) or "proofreading…"
@@ -282,6 +302,7 @@ function M.proofread(opts)
 
   function job.cancel()
     cancel()
+    settle_marks(bufnr, req, {})
     spinner.stop()
     jobs[bufnr] = nil
     pcall(vim.api.nvim_buf_del_extmark, bufnr, region_ns, req.mark)
@@ -353,6 +374,7 @@ function M.clear(bufnr)
   end
   popup.close()
   session.clear(bufnr)
+  tentative.clear(bufnr)
 end
 
 ---Short status for statuslines: "" when idle.
