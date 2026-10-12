@@ -5,3 +5,5 @@ max_line_length = 120
 max_string_line_length = false
 max_comment_line_length = false
 files["tests"] = { std = "+busted" }
+-- Third-party code kept as published (see lua/ai-polish/vendor/budoux/README.md).
+exclude_files = { "lua/ai-polish/vendor/**" }
