@@ -35,6 +35,16 @@ M.defaults = {
     language = "auto", -- source text hint; independent of UI locale
     panel_width = 30, -- 30..60 cells; compact two-row display by default
     uncertainty_threshold = 0.5, -- presentation heuristic, not calibrated accuracy
+    -- Japanese only: Jev underlines suspicious bunsetsu while Gemini is still writing. One
+    -- question per bunsetsu, 40 per request; about 4 requests for 3,000 characters.
+    marks = {
+      enabled = true,
+      -- Jev's probability that a bunsetsu needs a fix. At 0.6 the marks are about as many as
+      -- Gemini's fixes (scripts/jev-marks-live.lua; Kotobae uses 0.55 on its lindera units).
+      threshold = 0.6,
+      max_requests = 20, -- per check, about 800 bunsetsu; later text gets no marks
+      in_flight = 16,
+    },
   },
 
   chunk = {
@@ -127,6 +137,17 @@ local function validate(opts)
   end
   if ev.uncertainty_threshold > 1 then
     error("ai-polish: evaluation.uncertainty_threshold must be <= 1")
+  end
+  vim.validate("evaluation.marks.enabled", ev.marks.enabled, "boolean")
+  local th = ev.marks.threshold
+  if type(th) ~= "number" or th ~= th or th <= 0 or th > 1 then
+    error("ai-polish: evaluation.marks.threshold must be in (0, 1]")
+  end
+  for _, name in ipairs({ "max_requests", "in_flight" }) do
+    local v = ev.marks[name]
+    if type(v) ~= "number" or v % 1 ~= 0 or v < 1 then
+      error("ai-polish: evaluation.marks." .. name .. " must be a positive integer")
+    end
   end
   if not vim.tbl_contains({ "auto", "en", "ja", "zh-Hans", "zh-Hant" }, ev.language) then
     error("ai-polish: unsupported evaluation.language")
