@@ -3,6 +3,7 @@ local config = require("ai-polish.config")
 local prompt = require("ai-polish.prompt")
 local http = require("ai-polish.http")
 local locale = require("ai-polish.locale")
+local numbered = require("ai-polish.numbered")
 
 local M = {}
 
@@ -11,12 +12,13 @@ local MAX_RETRIES = 2
 local MAX_OUTPUT_TOKENS = 16384
 
 ---@param text string
----@param ctx { filetype?: string }
+---@param ctx { filetype?: string, split?: { units: ai_polish.Unit[] } } `split` numbers the units
 function M.build_body(text, ctx)
   local opts = config.options
+  local split = ctx.split
   local generation = {
     responseMimeType = "application/json",
-    responseJsonSchema = prompt.schema,
+    responseJsonSchema = split and prompt.numbered_schema or prompt.schema,
     maxOutputTokens = MAX_OUTPUT_TOKENS,
     temperature = opts.temperature,
   }
@@ -31,11 +33,14 @@ function M.build_body(text, ctx)
             filetype = ctx.filetype,
             language = locale.language(),
             instructions = opts.instructions,
+            numbered = split ~= nil,
           }),
         },
       },
     },
-    contents = { { role = "user", parts = { { text = prompt.user(text) } } } },
+    contents = {
+      { role = "user", parts = { { text = prompt.user(split and numbered.text(text, split) or text, split ~= nil) } } },
+    },
     generationConfig = generation,
   }
 end
@@ -93,6 +98,8 @@ local function normalize(item)
     return nil
   end
   return {
+    from = type(item.from) == "number" and item.from or nil,
+    to = type(item.to) == "number" and item.to or nil,
     before = before,
     after = after,
     context_before = str(item.context_before) or "",
@@ -148,10 +155,11 @@ function M.parse_response(body)
   return out, nil, usage
 end
 
----Send one proofreading request.
+---Send one proofreading request. With `ctx.split` the suggestions come back placed by their unit
+---numbers (`start`/`finish` in `text`), and `dropped` counts those that could not be placed.
 ---@param text string
----@param ctx { filetype?: string }
----@param cb fun(suggestions: table[]|nil, err: string|nil, usage: table|nil)
+---@param ctx { filetype?: string, split?: { units: ai_polish.Unit[] } }
+---@param cb fun(suggestions: table[]|nil, err: string|nil, usage: table|nil, dropped: integer|nil)
 ---@return { cancel: fun() }
 function M.proofread(text, ctx, cb)
   local key, key_err = config.api_key()
@@ -190,7 +198,12 @@ function M.proofread(text, ctx, cb)
       if err then
         return cb(nil, err)
       end
-      cb(M.parse_response(res.body))
+      local sugs, perr, usage = M.parse_response(res.body)
+      if not sugs or not ctx.split then
+        return cb(sugs, perr, usage)
+      end
+      local placed, dropped = numbered.place_all(text, ctx.split, sugs)
+      cb(placed, nil, usage, dropped)
     end)
   end
   attempt(0)

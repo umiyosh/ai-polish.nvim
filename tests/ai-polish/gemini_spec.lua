@@ -147,3 +147,73 @@ describe("gemini.proofread", function()
     assert.matches("API key", err)
   end)
 end)
+
+describe("numbered requests (Japanese)", function()
+  local units = require("ai-polish.units")
+  local text = "訓練日程に確認した。"
+  local split = units.split(text, {
+    parse = function()
+      return { "訓練日程に", "確認した。" }
+    end,
+  })
+
+  it("sends the text with numbered units, numbering rules and a schema without context", function()
+    local body = gemini.build_body(text, { split = split })
+    local user = body.contents[1].parts[1].text
+    assert.truthy(user:find("〔1〕訓練日程に〔2〕確認した。", 1, true))
+    local system = body.systemInstruction.parts[1].text
+    assert.truthy(system:find("`from`", 1, true))
+    assert.falsy(system:find("context_before", 1, true))
+    local item = body.generationConfig.responseJsonSchema.properties.suggestions.items
+    assert.same({ "from", "to", "before", "after", "message", "category", "severity" }, item.required)
+    assert.is_nil(item.properties.context_before)
+  end)
+
+  it("keeps the context form for text that is not split", function()
+    local body = gemini.build_body("teh text", {})
+    assert.truthy(body.systemInstruction.parts[1].text:find("context_before", 1, true))
+    assert.falsy(body.contents[1].parts[1].text:find("〔", 1, true))
+  end)
+
+  it("places each fix by its numbers and reports the ones it drops", function()
+    local orig = http.post
+    config.setup({ api_key = "k" })
+    http.post = function(_, cb)
+      cb({
+        status = 200,
+        body = response({
+          suggestions = {
+            {
+              from = 1,
+              to = 2,
+              before = "日程に確認",
+              after = { "日程を確認" },
+              message = "m",
+              category = "grammar",
+              severity = "warning",
+            },
+            {
+              from = 1,
+              to = 1,
+              before = "確認した",
+              after = { "確認する" },
+              message = "m",
+              category = "grammar",
+              severity = "warning",
+            },
+          },
+        }),
+      })
+      return { cancel = function() end }
+    end
+    local got, dropped
+    gemini.proofread(text, { split = split }, function(sugs, _, _, d)
+      got, dropped = sugs, d
+    end)
+    http.post = orig
+    assert.equals(1, #got)
+    assert.equals(#"訓練", got[1].start)
+    assert.equals(#"訓練日程に確認", got[1].finish)
+    assert.equals(1, dropped)
+  end)
+end)
