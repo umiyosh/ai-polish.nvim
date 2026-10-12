@@ -94,7 +94,7 @@ end
 
 ---Run `chunks` through Gemini with bounded concurrency.
 local function run_chunks(chunks, ctx, on_progress, on_done)
-  local results, errors = {}, {}
+  local results, errors, unplaced = {}, {}, 0
   local next_i, running, finished = 1, 0, 0
   local handles, cancelled = {}, false
 
@@ -103,7 +103,9 @@ local function run_chunks(chunks, ctx, on_progress, on_done)
       local i = next_i
       next_i = next_i + 1
       running = running + 1
-      handles[i] = gemini.proofread(chunks[i].text, ctx, function(sugs, err)
+      -- Each chunk numbers its own units from 1.
+      local chunk_ctx = vim.tbl_extend("force", ctx, { split = chunks[i].split })
+      handles[i] = gemini.proofread(chunks[i].text, chunk_ctx, function(sugs, err, _, dropped)
         if cancelled then
           return
         end
@@ -114,10 +116,11 @@ local function run_chunks(chunks, ctx, on_progress, on_done)
           errors[#errors + 1] = err
         else
           results[i] = sugs
+          unplaced = unplaced + (dropped or 0)
         end
         on_progress(finished, #chunks)
         if finished == #chunks then
-          on_done(results, errors)
+          on_done(results, errors, unplaced)
         else
           pump()
         end
@@ -155,7 +158,7 @@ local function settle_marks(bufnr, req, fixes)
   tentative.clear(bufnr)
 end
 
-local function finish(bufnr, req, results, errors)
+local function finish(bufnr, req, results, errors, unplaced)
   local cur, row0, col0 = region_text(bufnr, req.mark)
   pcall(vim.api.nvim_buf_del_extmark, bufnr, region_ns, req.mark)
   if not cur then
@@ -173,12 +176,16 @@ local function finish(bufnr, req, results, errors)
   else
     -- The buffer was edited while waiting: chunk offsets are unreliable, search the
     -- whole current region instead. Suggestions for edited spots will not be found.
+    -- Positions from unit numbers are relative to their chunk, so they are searched again too.
     local flat = {}
     for i = 1, #req.chunks do
-      vim.list_extend(flat, results[i] or {})
+      for _, s in ipairs(results[i] or {}) do
+        flat[#flat + 1] = vim.tbl_extend("force", s, { start = false, finish = false })
+      end
     end
     all, dropped = text.resolve(cur, flat, 0)
   end
+  dropped = dropped + (unplaced or 0)
 
   local items = {}
   for _, s in ipairs(all) do
@@ -268,6 +275,15 @@ function M.proofread(opts)
   session.clear(bufnr)
   popup.close()
 
+  -- Japanese text names fixes by bunsetsu number (numbered.lua); other languages quote context.
+  local language = require("ai-polish.jev_segment").language(content, config.options.evaluation.language)
+  if language == "ja" then
+    local units = require("ai-polish.units")
+    for _, c in ipairs(chunks) do
+      c.split = units.split(c.text)
+    end
+  end
+
   local req = {
     whole = opts.range == nil,
     chunks = chunks,
@@ -292,11 +308,11 @@ function M.proofread(opts)
   local cancel = run_chunks(chunks, ctx, function(done, total)
     job.done = done
     spinner.update(label(done, total))
-  end, function(results, errors)
+  end, function(results, errors, unplaced)
     jobs[bufnr] = nil
     spinner.stop()
     if vim.api.nvim_buf_is_valid(bufnr) then
-      finish(bufnr, req, results, errors)
+      finish(bufnr, req, results, errors, unplaced)
     end
   end)
 

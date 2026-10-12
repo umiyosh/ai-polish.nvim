@@ -27,6 +27,28 @@ local function sug(before, after, cb, ca)
   }
 end
 
+-- A fix in the numbered form Japanese requests use: `before` (found inside `near`) named by the
+-- number of the unit it lies in, whatever units BudouX made.
+local function nsug(req, near, before, after)
+  local text = vim.json.decode(req.body).contents[1].parts[1].text
+  local starts, removed = {}, 0
+  for pos, marker, num in text:gmatch("()(〔(%d+)〕)") do
+    starts[#starts + 1] = { at = pos - removed, n = tonumber(num) }
+    removed = removed + #marker
+  end
+  local plain = text:gsub("〔%d+〕", "")
+  local at = assert(plain:find(near, 1, true), near) + assert(near:find(before, 1, true)) - 1
+  local n
+  for _, s in ipairs(starts) do
+    if s.at <= at then
+      n = s.n
+    end
+  end
+  local s = sug(before, after)
+  s.from, s.to, s.context_before, s.context_after = n, n, nil, nil
+  return s
+end
+
 local function open_buffer(lines)
   vim.cmd("enew!")
   local b = vim.api.nvim_get_current_buf()
@@ -96,8 +118,8 @@ describe("proofreading flow", function()
 
   it("proofreads the buffer, opens the popup and applies accepted edits", function()
     local b = open_buffer({ "今日わ良い天気です。", "明日わ雨です。" })
-    reply = function()
-      return gemini_reply({ sug("わ", "は", "今日", "良い"), sug("わ", "は", "明日", "雨") })
+    reply = function(req)
+      return gemini_reply({ nsug(req, "今日わ", "わ", "は"), nsug(req, "明日わ", "わ", "は") })
     end
     vim.cmd("AiPolish")
     wait_idle()
@@ -111,6 +133,19 @@ describe("proofreading flow", function()
     assert.same({ "今日は良い天気です。", "明日わ雨です。" }, lines(b))
     assert.is_false(popup.is_open())
     assert.is_nil(session.get(b))
+  end)
+
+  it("finds numbered fixes again when the buffer was edited while waiting", function()
+    local b = open_buffer({ "今日わ良い天気です。" })
+    reply = function(req)
+      return gemini_reply({ nsug(req, "今日わ", "わ", "は") })
+    end
+    vim.cmd("AiPolish")
+    -- Before the scheduled reply: the unit's offset in the sent text no longer holds.
+    vim.api.nvim_buf_set_text(b, 0, 0, 0, 0, { "さて、" })
+    wait_idle()
+    popup._actions.accept()
+    assert.same({ "さて、今日は良い天気です。" }, lines(b))
   end)
 
   it("proofreads only a charwise visual selection", function()
@@ -173,7 +208,7 @@ describe("proofreading flow", function()
     reply = function(req)
       local text = vim.json.decode(req.body).contents[1].parts[1].text
       if text:find("最後わ", 1, true) then
-        return gemini_reply({ sug("わ", "は", "最後", "誤字") })
+        return gemini_reply({ nsug(req, "最後わ", "わ", "は") })
       end
       return gemini_reply({})
     end
@@ -266,8 +301,8 @@ describe("proofreading flow", function()
       assert.equals(2, #pending)
       answer_jev()
       assert.is_true(marked(b) > 0)
-      answer(false, function()
-        return gemini_reply({ sug("わ", "は", "今日", "良い") })
+      answer(false, function(p)
+        return gemini_reply({ nsug(p.req, "今日わ", "わ", "は") })
       end)
       wait_idle()
       assert.equals(0, marked(b))

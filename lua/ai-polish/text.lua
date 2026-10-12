@@ -152,7 +152,11 @@ function M.resolve(text, suggestions, offset)
   local located = {}
   local dropped = 0
   for _, s in ipairs(suggestions) do
-    local a, b = M.locate(text, s)
+    -- Suggestions placed by unit numbers (numbered.lua) already know where they are.
+    local a, b = s.start, s.finish
+    if not a then
+      a, b = M.locate(text, s)
+    end
     if a then
       located[#located + 1] = vim.tbl_extend("force", s, { start = a + offset, finish = b + offset })
     else
