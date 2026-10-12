@@ -45,8 +45,11 @@ local function set_highlights()
   for group, link in pairs(links) do
     vim.api.nvim_set_hl(0, group, { link = link, default = true })
   end
-  -- Jev's tentative marks: lighter than a suggestion, which takes over the spot.
-  vim.api.nvim_set_hl(0, "AiPolishTentative", { underdotted = true, default = true })
+  -- Jev's tentative marks. A red wave stands out while Gemini writes; terminals that lack dotted
+  -- underlines draw it as a plain one that reads like ordinary text. Suggestions replace the
+  -- marks, so the two never show together.
+  local err = vim.api.nvim_get_hl(0, { name = "DiagnosticError", link = false })
+  vim.api.nvim_set_hl(0, "AiPolishTentative", { undercurl = true, sp = err.fg or "Red", default = true })
 end
 
 function M.setup(opts)
