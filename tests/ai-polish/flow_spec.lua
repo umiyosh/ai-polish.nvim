@@ -294,5 +294,32 @@ describe("proofreading flow", function()
       assert.equals(2, #pending)
       vim.cmd("AiPolish cancel")
     end)
+
+    local function mark_requests()
+      return vim.tbl_filter(function(p)
+        return p.jev and vim.json.decode(p.req.body).questions.e0001 ~= nil
+      end, pending)
+    end
+
+    it("underlines marks on an explicit evaluation and keeps them until cleared", function()
+      local eval = require("ai-polish.evaluation")
+      local b = open_buffer({ "今日わ良い天気です。" })
+      eval.evaluate({ bufnr = b, whole = true })
+      assert.equals(1, #mark_requests())
+      local p = mark_requests()[1]
+      p.cb({ status = 200, body = vim.json.encode({ answers = { e0001 = { type = "noul", noul = 0.9 } } }) })
+      assert.equals(1, marked(b))
+      vim.cmd("AiPolish clear")
+      assert.equals(0, marked(b))
+    end)
+
+    it("does not ask for marks on an automatic evaluation", function()
+      polish.setup({ api_key = "k" })
+      local b = open_buffer({ "今日わ良い天気です。" })
+      require("ai-polish.evaluation").evaluate({ bufnr = b, whole = true, automatic = true })
+      assert.is_true(#pending > 0)
+      assert.equals(0, #mark_requests())
+      vim.cmd("AiPolish clear")
+    end)
   end)
 end)

@@ -144,38 +144,14 @@ local function region_text(bufnr, mark)
   return table.concat(lines, "\n"), m[1], m[2]
 end
 
----Ask Jev for tentative marks while Gemini writes (Japanese only). Uses the evaluation key only
----when it is available without prompting, like the automatic evaluation.
----@return { cancel: fun() }|nil
-local function start_marks(bufnr, content, r)
-  local ev = config.options.evaluation
-  if not ev.marks.enabled or not config.evaluation_available() then
-    return nil
-  end
-  if require("ai-polish.jev_segment").language(content, ev.language) ~= "ja" then
-    return nil
-  end
-  local key = config.evaluation_key()
-  if not key then
-    return nil
-  end
-  local t = tentative.start(bufnr, content, r[1], r[2])
-  return require("ai-polish.jev_marks").ask(content, key, ev.marks, function(found)
-    t:add(found)
-  end, function() end)
-end
-
 ---Hand Gemini's fixes to the marks. The whole answer arrives at once until streaming (#17), so
 ---no mark outlives it.
 local function settle_marks(bufnr, req, fixes)
-  if not req.marks then
+  -- Marks a later check started (an explicit evaluation) are not this check's to clear.
+  if not req.marks or tentative.get(bufnr) ~= req.marks then
     return
   end
-  req.marks.cancel()
-  local t = tentative.get(bufnr)
-  if t then
-    t:reached(fixes)
-  end
+  req.marks:reached(fixes)
   tentative.clear(bufnr)
 end
 
@@ -303,7 +279,7 @@ function M.proofread(opts)
       end_right_gravity = true,
     }),
   }
-  req.marks = start_marks(bufnr, content, r)
+  req.marks = tentative.ask(bufnr, content, r[1], r[2])
   local spinner = progress.start(bufnr)
   local function label(done, total)
     return total > 1 and ("proofreading %d/%d…"):format(done, total) or "proofreading…"

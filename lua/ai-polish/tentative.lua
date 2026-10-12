@@ -94,12 +94,39 @@ function M.get(bufnr)
   return active[bufnr]
 end
 
----Remove every mark of the buffer; answers still on their way are ignored.
+---Ask Jev about `content` (Japanese only) and underline its marks as requests answer, replacing
+---the marks of an earlier check. Uses the evaluation key only when it is available without
+---prompting, like the automatic evaluation.
+---@return AiPolishTentative|nil
+function M.ask(bufnr, content, row0, col0)
+  local config = require("ai-polish.config")
+  local ev = config.options.evaluation
+  if not ev.marks.enabled or not config.evaluation_available() then
+    return nil
+  end
+  if require("ai-polish.jev_segment").language(content, ev.language) ~= "ja" then
+    return nil
+  end
+  local key = config.evaluation_key()
+  if not key then
+    return nil
+  end
+  local t = M.start(bufnr, content, row0, col0)
+  t.job = require("ai-polish.jev_marks").ask(content, key, ev.marks, function(found)
+    t:add(found)
+  end, function() end)
+  return t
+end
+
+---Remove every mark of the buffer and stop asking for more.
 function M.clear(bufnr)
   local t = active[bufnr]
   if t then
     t.closed = true
     active[bufnr] = nil
+    if t.job then
+      t.job.cancel()
+    end
   end
   if vim.api.nvim_buf_is_valid(bufnr) then
     vim.api.nvim_buf_clear_namespace(bufnr, M.ns, 0, -1)

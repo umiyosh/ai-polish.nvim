@@ -256,6 +256,11 @@ function M.evaluate(opts)
   elseif s.pending == job then
     job.cancel = handle.cancel
   end
+  -- An explicit evaluation also shows where Jev would fix. Automatic ones do not, so editing
+  -- and accepting suggestions never send the extra per-bunsetsu requests.
+  if ok and not opts.automatic then
+    require("ai-polish.tentative").ask(buf, content, range[1], range[2])
+  end
 end
 
 function M.toggle()
