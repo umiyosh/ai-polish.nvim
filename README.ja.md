@@ -346,3 +346,5 @@ CI（GitHub Actions）では、push と pull request のたびに次のジョブ
 ## License
 
 MIT
+
+[budoux.lua](https://github.com/delphinus/budoux.lua)（Google BudouX の Lua 移植）を Apache License 2.0 のもとで同梱しています。`lua/ai-polish/vendor/budoux/` を参照してください。

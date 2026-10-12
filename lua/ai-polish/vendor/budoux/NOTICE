@@ -1,0 +1,19 @@
+budoux.lua
+Copyright 2025 delphinus
+
+This project is a Lua port of BudouX.
+
+BudouX
+  https://github.com/google/budoux
+  Copyright 2021 Google LLC
+  Licensed under the Apache License, Version 2.0
+
+  Files:
+    lua/budoux/init.lua            - Parser logic ported from Python/JavaScript to Lua
+    lua/budoux/models/ja.lua       - Japanese model data from budoux/models/ja.json
+    lua/budoux/models/zh_hans.lua  - Simplified Chinese model data from budoux/models/zh_hans.json
+    lua/budoux/models/zh_hant.lua  - Traditional Chinese model data from budoux/models/zh_hant.json
+    lua/budoux/models/th.lua       - Thai model data from budoux/models/thai.json
+
+  The full text of the Apache License, Version 2.0 is available at:
+  https://www.apache.org/licenses/LICENSE-2.0

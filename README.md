@@ -348,3 +348,5 @@ CI (GitHub Actions) runs on every push and pull request:
 ## License
 
 MIT
+
+Bundles [budoux.lua](https://github.com/delphinus/budoux.lua) (a Lua port of Google BudouX) under the Apache License 2.0; see `lua/ai-polish/vendor/budoux/`.
