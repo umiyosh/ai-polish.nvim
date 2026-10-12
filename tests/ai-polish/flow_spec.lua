@@ -148,6 +148,18 @@ describe("proofreading flow", function()
     assert.same({ "さて、今日は良い天気です。" }, lines(b))
   end)
 
+  it("sends the Japanese rules only with Japanese text", function()
+    local function system_of(buffer_lines)
+      requests = {}
+      open_buffer(buffer_lines)
+      vim.cmd("AiPolish")
+      wait_idle()
+      return vim.json.decode(requests[1].body).systemInstruction.parts[1].text
+    end
+    assert.truthy(system_of({ "今日わ良い天気です。" }):find("常体", 1, true))
+    assert.falsy(system_of({ "teh weather is nice." }):find("常体", 1, true))
+  end)
+
   it("proofreads only a charwise visual selection", function()
     local b = open_buffer({ "teh start, teh middle, teh end" })
     reply = function(req)

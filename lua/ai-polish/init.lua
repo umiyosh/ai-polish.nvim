@@ -304,7 +304,7 @@ function M.proofread(opts)
 
   local job = { done = 0, total = #chunks }
   jobs[bufnr] = job
-  local ctx = { filetype = vim.bo[bufnr].filetype }
+  local ctx = { filetype = vim.bo[bufnr].filetype, language = language }
   local cancel = run_chunks(chunks, ctx, function(done, total)
     job.done = done
     spinner.update(label(done, total))

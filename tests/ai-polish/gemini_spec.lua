@@ -217,3 +217,32 @@ describe("numbered requests (Japanese)", function()
     assert.equals(1, dropped)
   end)
 end)
+
+describe("Japanese prompt rules", function()
+  local function system(ctx)
+    return gemini.build_body("text", ctx).systemInstruction.parts[1].text
+  end
+
+  it("adds Kotobae's rules for Japanese text", function()
+    local s = system({ language = "ja" })
+    for _, rule in ipairs({
+      "固有名詞",
+      "タオリ",
+      "常体",
+      "すすん",
+      "なかったと思う",
+      "よよよよ",
+      "1行",
+    }) do
+      assert.truthy(s:find(rule, 1, true), rule)
+    end
+  end)
+
+  it("leaves the prompt for other languages unchanged", function()
+    for _, language in ipairs({ "en", "zh-Hans", "zh-Hant" }) do
+      local s = system({ language = language })
+      assert.falsy(s:find("常体", 1, true), language)
+      assert.equals(system({}), s)
+    end
+  end)
+end)
