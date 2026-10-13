@@ -5,6 +5,7 @@ local session = require("ai-polish.session")
 local popup = require("ai-polish.popup")
 local progress = require("ai-polish.progress")
 local tentative = require("ai-polish.tentative")
+local arrivals = require("ai-polish.arrivals")
 
 local M = {}
 
@@ -92,9 +93,10 @@ function M._guard(est)
   return "send"
 end
 
----Run `chunks` through Gemini with bounded concurrency.
-local function run_chunks(chunks, ctx, on_progress, on_done)
-  local results, errors, unplaced = {}, {}, 0
+---Run `chunks` through Gemini with bounded concurrency, handing over each chunk's suggestions
+---as Gemini writes them (`on_arrive(i, suggestions)`).
+local function run_chunks(chunks, ctx, on_arrive, on_progress, on_done)
+  local errors = {}
   local next_i, running, finished = 1, 0, 0
   local handles, cancelled = {}, false
 
@@ -105,7 +107,11 @@ local function run_chunks(chunks, ctx, on_progress, on_done)
       running = running + 1
       -- Each chunk numbers its own units from 1.
       local chunk_ctx = vim.tbl_extend("force", ctx, { split = chunks[i].split })
-      handles[i] = gemini.proofread(chunks[i].text, chunk_ctx, function(sugs, err, _, dropped)
+      handles[i] = gemini.proofread_stream(chunks[i].text, chunk_ctx, function(sugs)
+        if not cancelled then
+          on_arrive(i, sugs)
+        end
+      end, function(err)
         if cancelled then
           return
         end
@@ -114,13 +120,10 @@ local function run_chunks(chunks, ctx, on_progress, on_done)
         handles[i] = nil
         if err then
           errors[#errors + 1] = err
-        else
-          results[i] = sugs
-          unplaced = unplaced + (dropped or 0)
         end
         on_progress(finished, #chunks)
         if finished == #chunks then
-          on_done(results, errors, unplaced)
+          on_done(errors)
         else
           pump()
         end
@@ -147,87 +150,105 @@ local function region_text(bufnr, mark)
   return table.concat(lines, "\n"), m[1], m[2]
 end
 
----Hand Gemini's fixes to the marks. The whole answer arrives at once until streaming (#17), so
----no mark outlives it.
-local function settle_marks(bufnr, req, fixes)
+---Clear what is left of this check's Jev marks.
+local function clear_marks(bufnr, req)
   -- Marks a later check started (an explicit evaluation) are not this check's to clear.
-  if not req.marks or tentative.get(bufnr) ~= req.marks then
-    return
+  if req.marks and tentative.get(bufnr) == req.marks then
+    tentative.clear(bufnr)
   end
-  req.marks:reached(fixes)
-  tentative.clear(bufnr)
 end
 
-local function finish(bufnr, req, results, errors, unplaced)
+---The region a check covers now, for evaluating it after proofreading or an accepted fix.
+local function evaluation_target(bufnr, req)
   local cur, row0, col0 = region_text(bufnr, req.mark)
-  pcall(vim.api.nvim_buf_del_extmark, bufnr, region_ns, req.mark)
   if not cur then
-    settle_marks(bufnr, req, {})
-    return notify("target text disappeared; results discarded", vim.log.levels.WARN)
+    return nil
   end
+  local er, ec = text.pos_at(cur, #cur, row0, col0)
+  return { whole = req.whole, range = { row0, col0, er, ec } }
+end
 
-  local all, dropped = {}, 0
-  if vim.api.nvim_buf_get_changedtick(bufnr) == req.tick then
-    for i, c in ipairs(req.chunks) do
-      local resolved, d = text.resolve(c.text, results[i] or {}, c.offset)
-      vim.list_extend(all, resolved)
-      dropped = dropped + d
-    end
+---Open the review on suggestions that just came in, when the user is still looking at the
+---buffer in Normal mode (as before streaming).
+local function open_review(bufnr, req, s)
+  local win = vim.api.nvim_get_current_win()
+  if vim.api.nvim_win_get_buf(win) == bufnr and vim.api.nvim_get_mode().mode == "n" then
+    req.opened = true
+    popup.open(s, win)
+  end
+end
+
+---Suggestions of chunk `i` as Gemini writes them, as in Kotobae: the first opens the review
+---right away, later ones join it by position, and Jev's marks give way to each.
+local function arrive(bufnr, req, i, sugs)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  local items, dropped = req.arrivals:place(i, sugs)
+  req.dropped = req.dropped + dropped
+  if req.marks and tentative.get(bufnr) == req.marks then
+    req.marks:reached(items, req.arrivals:scope(i))
+  end
+  if #items == 0 then
+    return
+  end
+  req.received = req.received + #items
+  req.on_received()
+  local s = req.session
+  if not s then
+    s = session.create(bufnr, items, evaluation_target(bufnr, req))
+    s.streaming, req.session = true, s
+    return open_review(bufnr, req, s)
+  end
+  s:add(items)
+  if s.waiting then
+    open_review(bufnr, req, s)
   else
-    -- The buffer was edited while waiting: chunk offsets are unreliable, search the
-    -- whole current region instead. Suggestions for edited spots will not be found.
-    -- Positions from unit numbers are relative to their chunk, so they are searched again too.
-    local flat = {}
-    for i = 1, #req.chunks do
-      for _, s in ipairs(results[i] or {}) do
-        flat[#flat + 1] = vim.tbl_extend("force", s, { start = false, finish = false })
-      end
-    end
-    all, dropped = text.resolve(cur, flat, 0)
+    popup.update(s)
   end
-  dropped = dropped + (unplaced or 0)
+end
 
-  local items = {}
-  for _, s in ipairs(all) do
-    local r, c = text.pos_at(cur, s.start, row0, col0)
-    local er, ec = text.pos_at(cur, s.finish, row0, col0)
-    items[#items + 1] = vim.tbl_extend("force", s, { row = r, col = c, end_row = er, end_col = ec })
+local function finish(bufnr, req, errors)
+  local target = evaluation_target(bufnr, req)
+  pcall(vim.api.nvim_buf_del_extmark, bufnr, region_ns, req.mark)
+  req.arrivals:clear()
+  clear_marks(bufnr, req)
+  local s, received = req.session, req.received
+  if s then
+    s.streaming, s.waiting = nil, nil
+    popup.update(s)
   end
-  settle_marks(bufnr, req, items)
 
-  if #errors > 0 and #errors == #req.chunks then
+  if #errors > 0 and received == 0 and #errors == #req.chunks then
     return notify("proofreading failed: " .. errors[1], vim.log.levels.ERROR)
   end
   if #errors > 0 then
-    notify(("%d of %d request(s) failed: %s"):format(#errors, #req.chunks, errors[1]), vim.log.levels.WARN)
+    -- Suggestions already under review stay (Kotobae: 校正が途中で止まりました).
+    local msg = received > 0
+        and ("stopped partway (showing the %d suggestion(s) received): %s"):format(received, errors[1])
+      or ("%d of %d request(s) failed: %s"):format(#errors, #req.chunks, errors[1])
+    notify(msg, vim.log.levels.WARN)
   end
-  local er, ec = text.pos_at(cur, #cur, row0, col0)
-  local evaluation = { whole = req.whole, range = { row0, col0, er, ec } }
-  require("ai-polish.evaluation").evaluate({
-    bufnr = bufnr,
-    whole = evaluation.whole,
-    range = not evaluation.whole and evaluation.range or nil,
-    automatic = true,
-    show = true,
-  })
-  if #items == 0 then
+  if target then
+    require("ai-polish.evaluation").evaluate({
+      bufnr = bufnr,
+      whole = target.whole,
+      range = not target.whole and target.range or nil,
+      automatic = true,
+      show = true,
+    })
+  end
+  local dropped = req.dropped
+  if received == 0 then
     return notify(
       "no issues found" .. (dropped > 0 and (" (%d unlocatable suggestion(s) ignored)"):format(dropped) or "")
     )
   end
-
-  local s = session.create(bufnr, items, evaluation)
-  local msg = ("%d suggestion(s)"):format(#s.items)
+  local msg = ("%d suggestion(s)"):format(received)
   if dropped > 0 then
     msg = msg .. (" (%d unlocatable ignored)"):format(dropped)
   end
-  local win = vim.api.nvim_get_current_win()
-  if vim.api.nvim_win_get_buf(win) == bufnr and vim.api.nvim_get_mode().mode == "n" then
-    notify(msg)
-    popup.open(s, win)
-  else
-    notify(msg .. " — run :AiPolish review to review them")
-  end
+  notify(req.opened and msg or (msg .. " — run :AiPolish review to review them"))
 end
 
 ---Proofread a region of a buffer (0-based, end-exclusive). Omit `range` for the whole buffer.
@@ -287,38 +308,53 @@ function M.proofread(opts)
   local req = {
     whole = opts.range == nil,
     chunks = chunks,
-    tick = vim.api.nvim_buf_get_changedtick(bufnr),
     mark = vim.api.nvim_buf_set_extmark(bufnr, region_ns, r[1], r[2], {
       end_row = r[3],
       end_col = r[4],
       right_gravity = false,
       end_right_gravity = true,
     }),
+    arrivals = arrivals.start(bufnr, chunks, content, r[1], r[2]),
+    received = 0,
+    dropped = 0,
   }
   req.marks = tentative.ask(bufnr, content, r[1], r[2])
   local spinner = progress.start(bufnr)
-  local function label(done, total)
-    return total > 1 and ("proofreading %d/%d…"):format(done, total) or "proofreading…"
-  end
-  spinner.update(label(0, #chunks))
-
   local job = { done = 0, total = #chunks }
+  local function label()
+    local done = #chunks > 1 and (" %d/%d"):format(job.done, #chunks) or ""
+    -- Kotobae shows 受信中 · N件 while suggestions keep coming.
+    return req.received > 0 and ("proofreading%s · %d received…"):format(done, req.received)
+      or ("proofreading%s…"):format(done)
+  end
+  spinner.update(label())
+  function req.on_received()
+    spinner.update(label())
+  end
+
   jobs[bufnr] = job
   local ctx = { filetype = vim.bo[bufnr].filetype, language = language }
-  local cancel = run_chunks(chunks, ctx, function(done, total)
+  local cancel = run_chunks(chunks, ctx, function(i, sugs)
+    arrive(bufnr, req, i, sugs)
+  end, function(done)
     job.done = done
-    spinner.update(label(done, total))
-  end, function(results, errors, unplaced)
+    spinner.update(label())
+  end, function(errors)
     jobs[bufnr] = nil
     spinner.stop()
     if vim.api.nvim_buf_is_valid(bufnr) then
-      finish(bufnr, req, results, errors, unplaced)
+      finish(bufnr, req, errors)
     end
   end)
 
   function job.cancel()
     cancel()
-    settle_marks(bufnr, req, {})
+    req.arrivals:clear()
+    clear_marks(bufnr, req)
+    if req.session then
+      req.session.streaming, req.session.waiting = nil, nil
+      popup.update(req.session)
+    end
     spinner.stop()
     jobs[bufnr] = nil
     pcall(vim.api.nvim_buf_del_extmark, bufnr, region_ns, req.mark)

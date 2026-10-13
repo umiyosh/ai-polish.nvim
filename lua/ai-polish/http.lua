@@ -14,8 +14,9 @@ end
 
 ---@param req { url: string, headers: table<string,string>, body: string, timeout_ms: integer }
 ---@param cb fun(res: AiPolishHttpResponse)
+---@param on_data? fun(chunk: string) streams stdout as it arrives; the status still comes in `cb`
 ---@return { cancel: fun() }
-function M.post(req, cb)
+local function send(req, cb, on_data)
   -- Headers go through a 0600 temp file so the API key never shows up in `ps`.
   local header_file = vim.fn.tempname()
   local lines = {}
@@ -41,13 +42,28 @@ function M.post(req, cb)
     req.url,
   }
 
-  local cancelled = false
-  local ok, proc = pcall(vim.system, cmd, { stdin = req.body, text = true }, function(out)
+  local cancelled, received = false, {}
+  local opts = { stdin = req.body, text = true }
+  if on_data then
+    -- Without it curl buffers the server-sent events and the first suggestion waits for the rest.
+    table.insert(cmd, 2, "--no-buffer")
+    opts.stdout = function(_, data)
+      if data and not cancelled then
+        received[#received + 1] = data
+        vim.schedule(function()
+          if not cancelled then
+            on_data(data)
+          end
+        end)
+      end
+    end
+  end
+  local ok, proc = pcall(vim.system, cmd, opts, function(out)
     os.remove(header_file)
     if cancelled then
       return
     end
-    local stdout = out.stdout or ""
+    local stdout = on_data and table.concat(received) or out.stdout or ""
     local body, code = stdout:match("^(.*)\n(%d%d%d)$")
     local res
     if out.code ~= 0 then
@@ -83,6 +99,23 @@ function M.post(req, cb)
       end)
     end,
   }
+end
+
+---@param req { url: string, headers: table<string,string>, body: string, timeout_ms: integer }
+---@param cb fun(res: AiPolishHttpResponse)
+---@return { cancel: fun() }
+function M.post(req, cb)
+  return send(req, cb)
+end
+
+---Like `post`, but hands over the body as it arrives (server-sent events). The last chunk ends
+---with the "\n<status>" line `cb` reports.
+---@param req { url: string, headers: table<string,string>, body: string, timeout_ms: integer }
+---@param on_data fun(chunk: string)
+---@param cb fun(res: AiPolishHttpResponse)
+---@return { cancel: fun() }
+function M.stream(req, on_data, cb)
+  return send(req, cb, on_data)
 end
 
 return M

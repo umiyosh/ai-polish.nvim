@@ -169,11 +169,12 @@ You can keep editing while suggestions are pending. A suggestion whose text you 
 
 | State | What you see |
 | --- | --- |
-| In progress | A non-focusable floating spinner in the editor's bottom-right corner (`⠋ AI Polish: proofreading 2/5…`), independent of scrolling and buffer decorations |
-| Done | A notification with the count, then the popup. If the popup cannot open (for example, you are in insert mode), you are told to run `:AiPolish review` |
+| In progress | A non-focusable floating spinner in the editor's bottom-right corner (`⠋ AI Polish: proofreading 2/5 · 3 received…`), independent of scrolling and buffer decorations |
+| Suggestions arriving | Gemini's answer streams in. The first suggestion opens the popup right away; later ones join the list in text order, and the count shows `1/3…` until the answer ends. Accept and reject work meanwhile. If you handle every suggestion so far, the popup closes and reopens when the next one arrives |
+| Done | A notification with the count. If the popup could not open (for example, you were in insert mode), you are told to run `:AiPolish review` |
 | Nothing found | `no issues found` |
 | Error | `vim.notify` at ERROR level with the HTTP status, the API error message, or the safety block reason |
-| Partial failure | A WARN when some chunks fail; suggestions from the successful chunks are still shown |
+| Partial failure | A WARN when some chunks fail or the answer stops partway; suggestions already received stay |
 | Cancelled | `:AiPolish cancel`, or Cancel in the confirmation dialog |
 
 For a statusline, use `require("ai-polish").status()`. It returns `""` when idle, `AI Polish 2/5` while running, and `AI Polish: 3` while suggestions remain.

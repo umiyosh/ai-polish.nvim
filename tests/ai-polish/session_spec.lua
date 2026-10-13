@@ -207,4 +207,27 @@ describe("session", function()
     s:move(1)
     assert.equals("a", s:current().before)
   end)
+
+  it("adds arriving suggestions by position and keeps the current one current", function()
+    local b = buf_with({ "teh cat adn dog wiht" })
+    local s = session.create(b, { item("adn", "and", 0, 8) })
+    s:add({ item("wiht", "with", 0, 16), item("teh", "the", 0, 0) })
+    assert.same(
+      { "teh", "adn", "wiht" },
+      vim.tbl_map(function(it)
+        return it.before
+      end, s.items)
+    )
+    assert.equals("adn", s:current().before)
+  end)
+
+  it("comes back when a suggestion arrives after every earlier one was handled", function()
+    local b = buf_with({ "teh cat adn dog" })
+    local s = session.create(b, { item("teh", "the", 0, 0) })
+    s:accept()
+    assert.is_nil(session.get(b))
+    s:add({ item("adn", "and", 0, 8) })
+    assert.equals(s, session.get(b))
+    assert.equals("adn", s:current().before)
+  end)
 end)

@@ -58,18 +58,29 @@ local function tail(text, n)
   return len <= n and text or vim.fn.strcharpart(text, len - n)
 end
 
+---Whether `raw` names units that exist among `count`.
+function M.in_range(raw, count)
+  return type(raw.from) == "number"
+    and type(raw.to) == "number"
+    and raw.from >= 1
+    and raw.from <= raw.to
+    and raw.to <= count
+end
+
 ---Turn one of Gemini's answers into a suggestion positioned in `text`, or nil to drop it.
 ---@param raw { from: integer, to: integer, before: string, after: string[], category?: string, severity?: string, message?: string }
 ---@return table|nil suggestion with `start`/`finish`, `context_before`/`context_after`
 function M.place(text, split, raw)
   local units = split.units
-  if type(raw.from) ~= "number" or type(raw.to) ~= "number" then
+  if not M.in_range(raw, #units) then
     return nil
   end
-  if raw.from < 1 or raw.to < raw.from or raw.to > #units then
-    return nil
-  end
-  local lo, hi = units[raw.from].from, units[raw.to].to
+  return M.place_span(text, units[raw.from].from, units[raw.to].to, raw)
+end
+
+---Place `raw` inside bytes `lo`..`hi` of `text`, where its units lie now. A streamed suggestion
+---uses the current extent of its units, which have moved with edits made while it was coming.
+function M.place_span(text, lo, hi, raw)
   local before = M.strip_numbers(raw.before or "")
   if before == "" then
     return nil

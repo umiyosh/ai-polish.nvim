@@ -47,10 +47,12 @@ local function before(ar, ac, br, bc)
   return ar < br or (ar == br and ac < bc)
 end
 
----Fixes that just arrived, in buffer positions. Takes them as they come, so streaming (#17) can
----call this per fix; until then the whole answer arrives at once.
+---Fixes that just arrived, in buffer positions, as Gemini streams them. Gemini writes the fixes
+---of one request in text order, so with `scope` (where that request's text lies) a mark counts
+---as passed only inside it: requests for other chunks run alongside and reach their own text.
 ---@param fixes { row: integer, col: integer, end_row: integer, end_col: integer }[]
-function Tentative:reached(fixes)
+---@param scope? { row: integer, col: integer, end_row: integer, end_col: integer }
+function Tentative:reached(fixes, scope)
   if self.closed or #fixes == 0 or not vim.api.nvim_buf_is_valid(self.bufnr) then
     return
   end
@@ -62,7 +64,9 @@ function Tentative:reached(fixes)
   end
   for _, m in ipairs(vim.api.nvim_buf_get_extmarks(self.bufnr, M.ns, 0, -1, { details = true })) do
     local id, row, col, d = m[1], m[2], m[3], m[4]
-    local passed = not before(rr, rc, d.end_row, d.end_col)
+    local inside = not scope
+      or (not before(row, col, scope.row, scope.col) and not before(scope.end_row, scope.end_col, d.end_row, d.end_col))
+    local passed = inside and not before(rr, rc, d.end_row, d.end_col)
     local landed = vim.iter(fixes):any(function(f)
       return before(row, col, f.end_row, f.end_col) and before(f.row, f.col, d.end_row, d.end_col)
     end)

@@ -62,6 +62,17 @@ describe("tentative marks", function()
     assert.same({ "二つ目。" }, shown(b))
   end)
 
+  it("counts a mark as passed only inside the request's own text", function()
+    local t = tentative.start(b, content, 0, 0)
+    t:add({ range("誤りは"), range("直す所は") })
+    -- A fix for the second line's request must not pass the first line's mark.
+    t:reached(
+      { at(b, 1, #"直す所は", 1, #"直す所は二") },
+      { row = 1, col = 0, end_row = 1, end_col = #"直す所は二つ目。" }
+    )
+    assert.same({ "誤りは" }, shown(b))
+  end)
+
   it("keeps every mark when no fix has arrived, and clears them all at the end", function()
     local t = tentative.start(b, content, 0, 0)
     t:add({ range("誤りは") })

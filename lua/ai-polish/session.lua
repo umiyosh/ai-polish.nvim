@@ -72,6 +72,46 @@ function M.create(bufnr, items, evaluation)
   return self
 end
 
+local function earlier(a, b)
+  return a[1] < b[1] or (a[1] == b[1] and a[2] < b[2])
+end
+
+---Add suggestions that arrived while Gemini is still writing. Each goes in by position, and the
+---current suggestion stays current (Kotobae's insertArrivals keeps the active one by id).
+---@param items table[] each with row, col, end_row, end_col
+---@return integer added
+function Session:add(items)
+  local current = self.items[self.index]
+  local added = 0
+  for _, it in ipairs(items) do
+    local ok, id = pcall(vim.api.nvim_buf_set_extmark, self.bufnr, M.ns, it.row, it.col, mark_opts(it, false))
+    if ok then
+      local at = #self.items + 1
+      for i, other in ipairs(self.items) do
+        local row, col = self:range(other)
+        if row and earlier({ it.row, it.col }, { row, col }) then
+          at = i
+          break
+        end
+      end
+      table.insert(self.items, at, vim.tbl_extend("force", it, { mark = id }))
+      added = added + 1
+    end
+  end
+  for i, it in ipairs(self.items) do
+    if it == current then
+      self.index = i
+    end
+  end
+  if not current then
+    self.index = 1
+  end
+  -- Handling every suggestion so far ended the session; one arriving later brings it back.
+  sessions[self.bufnr] = self
+  self:render()
+  return added
+end
+
 ---@return AiPolishSession|nil
 function M.get(bufnr)
   local s = sessions[bufnr]
