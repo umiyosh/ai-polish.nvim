@@ -46,7 +46,8 @@ function M.render_lines(session, width)
   end
 
   local head = ("%s · %s"):format(locale.label(item.category), locale.label(item.severity))
-  local count = ("%d/%d"):format(session.index, #session.items)
+  -- "…" while Gemini is still writing: more suggestions may come (Kotobae: 受信中).
+  local count = ("%d/%d%s"):format(session.index, #session.items, session.streaming and "…" or "")
   local pad = math.max(2, width - vim.fn.strdisplaywidth(head) - #count)
   add(head .. string.rep(" ", pad) .. count, "AiPolishTitle")
   if item.message ~= "" then
@@ -125,7 +126,13 @@ local function refresh(choice)
   local session, win = state.session, state.source_win
   if #session.items == 0 then
     M.close()
-    notify("review finished")
+    -- Every suggestion so far is handled but Gemini is still writing: the next one reopens the
+    -- popup, as Kotobae shows the next arrival on its own.
+    if session.streaming then
+      session.waiting = true
+    else
+      notify("review finished")
+    end
     return
   end
   open(session, win, choice)
@@ -164,6 +171,7 @@ end
 function actions.accept_all()
   local session = state.session
   M.close()
+  session.waiting = session.streaming
   local applied, skipped = session:accept_all()
   notify(("applied %d suggestion(s)%s"):format(applied, skipped > 0 and (", skipped %d stale"):format(skipped) or ""))
 end
@@ -171,6 +179,7 @@ end
 function actions.reject_all()
   local session = state.session
   M.close()
+  session.waiting = session.streaming
   session:reject_all()
   notify("dismissed all suggestions")
 end
@@ -322,7 +331,16 @@ end
 ---@param session AiPolishSession
 ---@param source_win integer
 function M.open(session, source_win)
+  session.waiting = nil
   open(session, source_win)
+end
+
+---Redraw for suggestions that arrived while the popup shows `session`, keeping the candidate
+---under the cursor.
+function M.update(session)
+  if M.is_open() and state.session == session then
+    refresh(candidate_under_cursor())
+  end
 end
 
 M._actions = actions

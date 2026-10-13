@@ -62,7 +62,7 @@ local function lines(b)
 end
 
 describe("proofreading flow", function()
-  local orig_post, orig_confirm, orig_notify = http.post, polish._confirm, vim.notify
+  local orig_post, orig_stream, orig_confirm, orig_notify = http.post, http.stream, polish._confirm, vim.notify
   local requests, reply, messages, jev_env
 
   before_each(function()
@@ -80,6 +80,18 @@ describe("proofreading flow", function()
       end)
       return { cancel = function() end }
     end
+    -- Gemini streams: the whole answer comes as one server-sent event.
+    http.stream = function(req, on_data, cb)
+      requests[#requests + 1] = req
+      local res = reply(req)
+      vim.schedule(function()
+        if res.status == 200 then
+          on_data("data: " .. res.body .. "\n\n")
+        end
+        cb(res)
+      end)
+      return { cancel = function() end }
+    end
     vim.notify = function(msg, level)
       messages[#messages + 1] = { msg = msg, level = level }
     end
@@ -87,7 +99,7 @@ describe("proofreading flow", function()
 
   after_each(function()
     popup.close()
-    http.post, polish._confirm, vim.notify = orig_post, orig_confirm, orig_notify
+    http.post, http.stream, polish._confirm, vim.notify = orig_post, orig_stream, orig_confirm, orig_notify
     vim.env.TYPESAFE_API_KEY = jev_env
   end)
 
@@ -256,7 +268,7 @@ describe("proofreading flow", function()
   it("cancels an in-flight request", function()
     open_buffer({ "text" })
     local cancelled = false
-    http.post = function()
+    http.stream = function()
       return {
         cancel = function()
           cancelled = true
@@ -283,6 +295,11 @@ describe("proofreading flow", function()
         pending[#pending + 1] = { req = req, cb = cb, jev = req.url:find("typesafe", 1, true) ~= nil }
         return { cancel = function() end }
       end
+      http.stream = function(req, on_data, cb)
+        requests[#requests + 1] = req
+        pending[#pending + 1] = { req = req, cb = cb, on_data = on_data, jev = false }
+        return { cancel = function() end }
+      end
     end)
 
     local function marked(b)
@@ -292,7 +309,11 @@ describe("proofreading flow", function()
     local function answer(jev, res)
       for _, p in ipairs(pending) do
         if p.jev == jev then
-          p.cb(res(p))
+          local r = res(p)
+          if p.on_data then
+            p.on_data("data: " .. r.body .. "\n\n")
+          end
+          p.cb(r)
         end
       end
     end
@@ -367,6 +388,75 @@ describe("proofreading flow", function()
       assert.is_true(#pending > 0)
       assert.equals(0, #mark_requests())
       vim.cmd("AiPolish clear")
+    end)
+  end)
+
+  describe("while Gemini streams", function()
+    local stream
+
+    before_each(function()
+      stream = nil
+      http.stream = function(req, on_data, cb)
+        requests[#requests + 1] = req
+        stream = { on_data = on_data, cb = cb }
+        return { cancel = function() end }
+      end
+    end)
+
+    -- Sends the next piece of the answer text as one server-sent event.
+    local function send(piece, finish)
+      local candidate = { content = { parts = { { text = piece } } }, finishReason = finish }
+      stream.on_data("data: " .. vim.json.encode({ candidates = { candidate } }) .. "\n\n")
+    end
+
+    local function suggestion(before, after, cb, ca)
+      return vim.json.encode(sug(before, after, cb, ca))
+    end
+
+    local function header()
+      return vim.api.nvim_buf_get_lines(popup.context().buf, 0, 1, false)[1]
+    end
+
+    it("opens the review on the first suggestion and adds later ones as they come", function()
+      local b = open_buffer({ "teh cat adn dog" })
+      vim.cmd("AiPolish")
+      send('{"suggestions":[' .. suggestion("teh", "the", "", " cat"))
+      assert.is_true(popup.is_open())
+      assert.truthy(header():find("1/1…", 1, true))
+      send(", " .. suggestion("adn", "and", "cat ", " dog"))
+      assert.truthy(header():find("1/2…", 1, true))
+      popup._actions.accept()
+      assert.same({ "the cat adn dog" }, lines(b))
+      send("]}", "STOP")
+      stream.cb({ status = 200, body = "" })
+      assert.truthy(header():find("1/1$"))
+      popup._actions.accept()
+      assert.same({ "the cat and dog" }, lines(b))
+    end)
+
+    it("waits when every suggestion so far is handled and reopens on the next one", function()
+      local b = open_buffer({ "teh cat adn dog" })
+      vim.cmd("AiPolish")
+      send('{"suggestions":[' .. suggestion("teh", "the", "", " cat"))
+      popup._actions.reject()
+      assert.is_false(popup.is_open())
+      assert.falsy(last_message():find("review finished", 1, true))
+      send(", " .. suggestion("adn", "and", "cat ", " dog"))
+      assert.is_true(popup.is_open())
+      popup._actions.accept()
+      assert.same({ "teh cat and dog" }, lines(b))
+    end)
+
+    it("keeps the suggestions received when the stream stops partway", function()
+      local b = open_buffer({ "teh cat adn dog" })
+      vim.cmd("AiPolish")
+      send('{"suggestions":[' .. suggestion("teh", "the", "", " cat"))
+      stream.cb({ status = 0, body = "", err = "connection reset" })
+      local msg = wait_message("stopped partway").msg
+      assert.truthy(msg:find("showing the 1 suggestion(s) received): connection reset", 1, true), msg)
+      assert.equals("AI Polish: 1", polish.status(b))
+      popup._actions.accept()
+      assert.same({ "the cat adn dog" }, lines(b))
     end)
   end)
 end)

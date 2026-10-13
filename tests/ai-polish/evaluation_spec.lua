@@ -20,7 +20,7 @@ local function reply(req)
 end
 
 describe("evaluation lifecycle", function()
-  local original_post, original_notify = http.post, vim.notify
+  local original_post, original_stream, original_notify = http.post, http.stream, vim.notify
   local requests, callbacks, cancelled, buf, env
   before_each(function()
     env = vim.env.TYPESAFE_API_KEY
@@ -40,13 +40,22 @@ describe("evaluation lifecycle", function()
         end,
       }
     end
+    -- Gemini streams; a test answers it whole, as one server-sent event.
+    http.stream = function(req, on_data, cb)
+      return http.post(req, function(res)
+        if res.status == 200 then
+          on_data("data: " .. res.body .. "\n\n")
+        end
+        cb(res)
+      end)
+    end
   end)
   after_each(function()
     polish.cancel(buf)
     require("ai-polish.popup").close()
     eval.reset()
     panel.close_details()
-    http.post, vim.notify = original_post, original_notify
+    http.post, http.stream, vim.notify = original_post, original_stream, original_notify
     vim.env.TYPESAFE_API_KEY = env
   end)
   it("shows no UI or request with an optional missing key", function()

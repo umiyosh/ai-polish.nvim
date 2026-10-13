@@ -194,4 +194,22 @@ function M.pos_at(text, off, start_row, start_col)
   return start_row + row, off - last_nl
 end
 
+---The byte offset in `text` of a buffer position, given where `text` starts; inverse of `pos_at`.
+---@return integer|nil offset, nil when the position lies outside `text`
+function M.offset_at(text, row, col, start_row, start_col)
+  if row < start_row or (row == start_row and col < start_col) then
+    return nil
+  end
+  local off, line = 0, start_row
+  while line < row do
+    local nl = text:find("\n", off + 1, true)
+    if not nl then
+      return nil
+    end
+    off, line = nl, line + 1
+  end
+  off = off + col - (row == start_row and start_col or 0)
+  return off <= #text and off or nil
+end
+
 return M

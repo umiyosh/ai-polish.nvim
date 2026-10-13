@@ -63,3 +63,51 @@ describe("private HTTP transport", function()
     assert.is_nil(vim.uv.fs_stat(path))
   end)
 end)
+
+describe("streaming HTTP transport", function()
+  local system, opts_seen, cmd_seen, done
+  before_each(function()
+    system = vim.system
+    vim.system = function(cmd, opts, callback)
+      cmd_seen, opts_seen, done = cmd, opts, callback
+      return { kill = function() end }
+    end
+  end)
+  after_each(function()
+    vim.system = system
+  end)
+
+  it("hands over stdout as it arrives and reports the status at the end", function()
+    local chunks, res = {}, nil
+    http.stream({ url = "https://example.invalid", headers = {}, body = "b", timeout_ms = 1000 }, function(c)
+      chunks[#chunks + 1] = c
+    end, function(r)
+      res = r
+    end)
+    assert.truthy(vim.tbl_contains(cmd_seen, "--no-buffer"))
+    opts_seen.stdout(nil, "data: {}\n\n")
+    opts_seen.stdout(nil, "data: {}\n\n\n200")
+    done({ code = 0 })
+    assert.is_true(vim.wait(100, function()
+      return res ~= nil
+    end))
+    assert.same({ "data: {}\n\n", "data: {}\n\n\n200" }, chunks)
+    assert.equals(200, res.status)
+    assert.equals("data: {}\n\ndata: {}\n\n", res.body)
+  end)
+
+  it("stops handing over chunks once cancelled", function()
+    local chunks = {}
+    local req = http.stream(
+      { url = "https://example.invalid", headers = {}, body = "b", timeout_ms = 1000 },
+      function(c)
+        chunks[#chunks + 1] = c
+      end,
+      function() end
+    )
+    opts_seen.stdout(nil, "data: {}\n\n")
+    req.cancel()
+    vim.wait(20)
+    assert.same({}, chunks)
+  end)
+end)

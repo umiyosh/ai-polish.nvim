@@ -4,6 +4,7 @@ local prompt = require("ai-polish.prompt")
 local http = require("ai-polish.http")
 local locale = require("ai-polish.locale")
 local numbered = require("ai-polish.numbered")
+local stream = require("ai-polish.stream")
 
 local M = {}
 
@@ -207,6 +208,95 @@ function M.proofread(text, ctx, cb)
       end
       local placed, dropped = numbered.place_all(text, ctx.split, sugs)
       cb(placed, nil, usage, dropped)
+    end)
+  end
+  attempt(0)
+
+  function handle.cancel()
+    handle.cancelled = true
+    if timer then
+      pcall(function()
+        timer:stop()
+      end)
+    end
+    if current then
+      current.cancel()
+    end
+  end
+  return handle
+end
+
+---Stream one proofreading request (`streamGenerateContent?alt=sse`) and hand over each
+---suggestion as soon as Gemini has written it, as Kotobae does. Suggestions are validated but
+---not placed: with `ctx.split` they still carry their unit numbers (`from`/`to`).
+---A failed request is retried only while nothing has been handed over, so a suggestion under
+---review never comes twice.
+---@param text string
+---@param ctx { filetype?: string, language?: string, split?: { units: ai_polish.Unit[] } }
+---@param on_suggestions fun(suggestions: table[])
+---@param on_done fun(err: string|nil, usage: table|nil)
+---@return { cancel: fun() }
+function M.proofread_stream(text, ctx, on_suggestions, on_done)
+  local key, key_err = config.api_key()
+  if not key then
+    vim.schedule(function()
+      on_done(key_err)
+    end)
+    return { cancel = function() end }
+  end
+  local opts = config.options
+  local req = {
+    url = ("%s/models/%s:streamGenerateContent?alt=sse"):format(opts.endpoint, opts.model),
+    headers = { ["Content-Type"] = "application/json", ["x-goog-api-key"] = key },
+    body = vim.json.encode(M.build_body(text, ctx)),
+    timeout_ms = opts.timeout_ms,
+  }
+
+  local handle = { cancelled = false }
+  local current, timer
+  local delivered = 0
+
+  local function attempt(n)
+    local decoder, answer = stream.decoder(), stream.answer()
+    local failure
+    local function read(events)
+      for _, data in ipairs(events) do
+        local raws, err = answer.read(data)
+        failure = failure or err
+        local valid = {}
+        for _, raw in ipairs(raws or {}) do
+          valid[#valid + 1] = normalize(raw)
+        end
+        if #valid > 0 and not handle.cancelled then
+          delivered = delivered + #valid
+          on_suggestions(valid)
+        end
+      end
+    end
+    current = http.stream(req, function(chunk)
+      if not handle.cancelled then
+        read(decoder.push(chunk))
+      end
+    end, function(res)
+      if handle.cancelled then
+        return
+      end
+      local retryable = res.err or RETRYABLE[res.status]
+      if retryable and delivered == 0 and n < MAX_RETRIES and res.err ~= "request timed out" then
+        timer = vim.defer_fn(function()
+          if not handle.cancelled then
+            attempt(n + 1)
+          end
+        end, 1000 * 2 ^ n)
+        return
+      end
+      local err = M.http_error(res)
+      if err then
+        return on_done(err, answer.usage)
+      end
+      read(decoder.finish())
+      local ok, ferr = answer.finish()
+      on_done(failure or (not ok and ferr) or nil, answer.usage)
     end)
   end
   attempt(0)
