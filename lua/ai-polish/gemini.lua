@@ -99,6 +99,7 @@ local function normalize(item)
   if #after == 0 then
     return nil
   end
+  local category = vim.tbl_contains(prompt.categories, item.category) and item.category or "style"
   return {
     from = type(item.from) == "number" and item.from or nil,
     to = type(item.to) == "number" and item.to or nil,
@@ -107,8 +108,8 @@ local function normalize(item)
     context_before = str(item.context_before) or "",
     context_after = str(item.context_after) or "",
     message = str(item.message) or "",
-    category = vim.tbl_contains(prompt.categories, item.category) and item.category or "style",
-    severity = vim.tbl_contains(prompt.severities, item.severity) and item.severity or "suggestion",
+    category = category,
+    severity = prompt.severity_of(category),
   }
 end
 

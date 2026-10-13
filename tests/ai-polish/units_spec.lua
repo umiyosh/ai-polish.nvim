@@ -68,6 +68,20 @@ describe("units", function()
     assert.same({ "北海道産の", "「とよまさり」に", "した、" }, texts(text, opts))
   end)
 
+  it("keeps a run of marks with the unit before, past the sentence end", function()
+    -- Each 。 ends a sentence, so the second one of 「。。」 starts a sentence of its own; left out of
+    -- every unit, a fix of 「。。」 fell outside its numbers and was dropped (#15).
+    local text = "準備ができました。。次へ。"
+    local opts = {
+      parse = parser({
+        ["準備ができました。"] = { "準備が", "できました。" },
+        ["。"] = { "。" },
+        ["次へ。"] = { "次へ。" },
+      }),
+    }
+    assert.same({ "準備が", "できました。。", "次へ。" }, texts(text, opts))
+  end)
+
   it("leaves spaces out of every unit and covers every other character once", function()
     local text = "Tauri で アプリを作る。"
     local opts = { parse = parser({ [text] = { "Tauri で ", "アプリを", "作る。" } }) }

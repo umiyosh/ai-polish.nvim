@@ -201,7 +201,10 @@ function M.split(text, opts)
       elseif OPENING[ch.c] then
         open, opening = false, opening or from
       elseif is_mark(ch.c) then
-        if last and last.to == from and last.sentence == index and not opening then
+        -- Adjacent marks join the unit before even past a sentence end, as in Kotobae: the second
+        -- 。 of 「。。」 starts a sentence of its own, and left out of every unit a fix of 「。。」
+        -- fell outside its numbers.
+        if last and last.to == from and not opening then
           last.to = to
         else
           opening = opening or from
