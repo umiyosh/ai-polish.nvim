@@ -234,15 +234,17 @@ describe("evaluation lifecycle", function()
     vim.cmd("AiPolish evaluate nonsense")
     assert.equals(1, #requests)
   end)
-  it("automatically evaluates the proofreading target and each accepted correction", function()
+  it("automatically evaluates the proofreading target alongside Gemini and each accepted correction", function()
     eval.evaluate({ range = { 1, 0, 1, 12 } })
     callbacks[1](reply(requests[1]))
     eval.polish()
-    assert.equals(2, #requests)
-    assert.is_truthy(requests[2].url:find("generativelanguage.googleapis.com", 1, true))
-    local content = vim.json.decode(requests[2].body).contents[1].parts[1].text
+    -- Jev evaluates alongside Gemini, as Kotobae does, so a quiet text needs no wait for Gemini.
+    assert.equals(3, #requests)
+    assert.equals("測試文書", vim.json.decode(requests[2].body).state.text)
+    assert.is_truthy(requests[3].url:find("generativelanguage.googleapis.com", 1, true))
+    local content = vim.json.decode(requests[3].body).contents[1].parts[1].text
     assert.is_truthy(content:find("TEXT\n測試文書\nTEXT", 1, true))
-    callbacks[2]({
+    callbacks[3]({
       status = 200,
       body = vim.json.encode({
         candidates = {
@@ -269,14 +271,12 @@ describe("evaluation lifecycle", function()
         },
       }),
     })
-    assert.equals(3, #requests)
-    assert.equals("測試文書", vim.json.decode(requests[3].body).state.text)
     assert.is_true(eval.view().visible)
     -- Accept while the initial automatic evaluation is still pending.
     require("ai-polish.popup")._actions.accept()
     assert.equals(4, #requests)
     assert.equals("測定文書", vim.json.decode(requests[4].body).state.text)
-    callbacks[3](reply(requests[3]))
+    callbacks[2](reply(requests[2]))
     assert.equals("loading", eval.snapshot(buf).status)
     callbacks[4](reply(requests[4]))
     assert.equals("ready", eval.snapshot(buf).status)
@@ -284,7 +284,9 @@ describe("evaluation lifecycle", function()
   end)
   it("automatically shows evaluation even when proofreading finds no issues", function()
     polish.proofread()
-    callbacks[1]({
+    assert.equals(2, #requests)
+    assert.is_truthy(requests[1].url:find("api.typesafe.ai", 1, true))
+    callbacks[2]({
       status = 200,
       body = vim.json.encode({
         candidates = {
@@ -292,9 +294,7 @@ describe("evaluation lifecycle", function()
         },
       }),
     })
-    assert.equals(2, #requests)
-    assert.is_truthy(requests[2].url:find("api.typesafe.ai", 1, true))
-    callbacks[2](reply(requests[2]))
+    callbacks[1](reply(requests[1]))
     panel.refresh()
     assert.is_true(panel.is_open())
     assert.equals("ready", eval.snapshot(buf).status)

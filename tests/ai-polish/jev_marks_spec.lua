@@ -159,4 +159,63 @@ describe("jev_marks", function()
       assert.is_false(called)
     end)
   end)
+
+  describe("every (for the level)", function()
+    local orig_post = http.post
+    local posted
+
+    before_each(function()
+      posted = {}
+      http.post = function(req, cb)
+        local entry = { req = req, cb = cb, body = vim.json.decode(req.body) }
+        posted[#posted + 1] = entry
+        return {
+          cancel = function()
+            entry.cancelled = true
+          end,
+        }
+      end
+    end)
+
+    after_each(function()
+      http.post = orig_post
+    end)
+
+    local function answer(i, values)
+      local answers = {}
+      for k in pairs(posted[i].body.questions) do
+        answers[k] = { type = "noul", noul = values[k] or 0 }
+      end
+      posted[i].cb({ status = 200, body = vim.json.encode({ answers = answers }) })
+    end
+
+    it("asks the written measure with its own keys and question", function()
+      local text = "それは良い。"
+      local q = marks.bodies(text, split(text), "written")[1].questions.b0001
+      assert.truthy(q.instructions.question:find("書き言葉に校正する", 1, true))
+    end)
+
+    it("collects every mark at Kotobae's level cut, in text order", function()
+      local text = string.rep("あい。", 80)
+      local got
+      marks.every(text, split(text), "key", "written", function(m)
+        got = m
+      end)
+      answer(2, { b0041 = 0.55 })
+      answer(1, { b0001 = 0.9, b0002 = 0.54 })
+      assert.same({ { from = 0, to = 9 }, { from = 360, to = 369 } }, got)
+    end)
+
+    it("fails the whole level when one request fails", function()
+      local text = string.rep("あい。", 80)
+      local got, err = "unset", nil
+      marks.every(text, split(text), "key", "errors", function(m, e)
+        got, err = m, e
+      end)
+      posted[1].cb({ status = 500, body = "" })
+      assert.is_nil(got)
+      assert.equals("service_error", err)
+      assert.is_true(posted[2].cancelled)
+    end)
+  end)
 end)

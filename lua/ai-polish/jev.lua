@@ -108,7 +108,7 @@ function M.plan(content)
 end
 
 -- Up to four active batches; cancellation or one failed batch aborts the entire run.
-function M.evaluate(content, key, callback, planned)
+local function check(content, key, callback, planned)
   local opts = vim.deepcopy(config.options.evaluation)
   local plan = planned or M.plan(content)
   -- Japanese refinement requests ride along with the local check; see jev_refine.
@@ -206,4 +206,58 @@ function M.evaluate(content, key, callback, planned)
   pump()
   return { cancel = cancel }
 end
+
+--- Evaluate `content`. For Japanese the unnaturalness level follows Kotobae's evaluation: the
+--- local check runs alongside per-bunsetsu marks of both measures (jev_marks.every), and
+--- jev_level turns them into the default level and the written-style level. Any failed request
+--- fails the evaluation, since a level must not rest on part of the text.
+---@param callback fun(result: table|nil, err: string|nil)
+---@return { cancel: fun() }
+function M.evaluate(content, key, callback, planned)
+  local plan = planned or M.plan(content)
+  if plan.language ~= "ja" then
+    return check(content, key, callback, plan)
+  end
+  local split = require("ai-polish.units").split(content)
+  local marks = require("ai-polish.jev_marks")
+  local got, handles, stopped = {}, {}, false
+  local function cancel()
+    stopped = true
+    for _, h in pairs(handles) do
+      h.cancel()
+    end
+  end
+  local function settle(name, value, err)
+    if stopped then
+      return
+    end
+    if value == nil then
+      cancel()
+      return callback(nil, err)
+    end
+    got[name] = value
+    if not (got.result and got.errors and got.written) then
+      return
+    end
+    stopped = true
+    local result, local_level = got.result, got.result.unnaturalness.level
+    local level, written =
+      require("ai-polish.jev_level").both(result.unnaturalness, content, got.errors, got.written, #split.units)
+    result.unnaturalness.level, result.unnaturalness.local_level = level, local_level
+    result.unnaturalness.marks, result.unnaturalness.written_marks = #got.errors, #got.written
+    result.written_level = written
+    callback(result)
+  end
+  handles.check = check(content, key, function(result, err)
+    settle("result", result, err)
+  end, plan)
+  for _, measure in ipairs({ "errors", "written" }) do
+    handles[measure] = marks.every(content, split, key, measure, function(m, err)
+      settle(measure, m, err)
+    end)
+  end
+  return { cancel = cancel }
+end
+-- The local check alone, without the marks; for tests and scripts that measure it.
+M.check = check
 return M

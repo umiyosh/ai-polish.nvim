@@ -126,7 +126,7 @@ describe("Jev local checks", function()
       requests[#requests + 1], callbacks[#callbacks + 1] = req, cb
       return { cancel = function() end }
     end
-    jev.evaluate(string.rep("文です。", 110), "test", function(r)
+    jev.check(string.rep("文です。", 110), "test", function(r)
       result = r
     end)
     assert.equals(4, #requests)
@@ -158,7 +158,7 @@ describe("Jev local checks", function()
         end,
       }
     end
-    local handle = jev.evaluate(string.rep("文です。", 110), "test", function()
+    local handle = jev.check(string.rep("文です。", 110), "test", function()
       delivered = delivered + 1
     end)
     handle.cancel()
@@ -177,7 +177,7 @@ describe("Jev local checks", function()
         end,
       }
     end
-    jev.evaluate(string.rep("文です。", 110), "test", function(_, e)
+    jev.check(string.rep("文です。", 110), "test", function(_, e)
       failure = e
     end)
     callbacks[2]({ status = 200, body = '{"answers":{}}' })

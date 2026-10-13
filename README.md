@@ -254,6 +254,15 @@ The smaller of `evaluation.max_chars` and `guard.max_chars` applies to explicit 
 
 Theme groups: `AiPolishEvalLow` (DiagnosticOk), `AiPolishEvalMid` (DiagnosticWarn), `AiPolishEvalHigh` (bold warning color), `AiPolishEvalLabel`/`Stale` (NormalFloat), `AiPolishEvalError` (DiagnosticWarn). No added font dependency. Panels hide on unrelated special buffers or overlap with the correction popup, and Gemini progress stacks above them.
 
+### Unnaturalness level and "no issues" (Japanese)
+
+For Japanese the unnaturalness level follows [Kotobae](https://github.com/umiyosh/kotobae):
+- **How it is computed:** the local check above runs alongside a per-bunsetsu question in two measures. One is errors only, accepting the writer's register; the other is written style. The level is how much there is to fix: level 1 means almost nothing, and 2 to 5 take the larger of the errors and the share of bunsetsu to rewrite beyond the marks Jev puts on correct text. The written-style level is kept for showing written style later.
+- **Cost:** an evaluation fails as a whole if any request fails, and a 3,000-character text takes roughly 30 more Jev requests than before.
+- **Accuracy:** on Kotobae's graded texts (fresh set) the level agreed with the gold at QWK 0.655, against 0.620 for the local check alone, and rated no correct text 3 or higher.
+
+Proofreading starts this evaluation alongside Gemini. When Jev rates the text 1, puts no early underline, and nothing has been shown yet, you are told `no issues found` right away. Gemini's suggestions are then held until you ask for them with `:AiPolish review`.
+
 ### Early underlines (Japanese)
 
 With a Jev key available without prompting, proofreading Japanese text also asks Jev, alongside Gemini, which bunsetsu need a fix (one question per bunsetsu, splitting with the bundled budoux.lua). Within about half a second the places Jev marks get a red wavy underline (`AiPolishTentative`), seconds before Gemini's suggestions. Underlines move with your edits; answers about text you have since edited are dropped. When Gemini's suggestions arrive, the underlines give way to them; cancelling clears them. An explicit evaluation (`:AiPolish evaluate`) shows the same underlines and keeps them until the next proofreading or evaluation, or `:AiPolish clear`; automatic evaluations do not ask for them. The question accepts the writer's own register, so spoken or casual wording is not marked. A 3,000-character text takes about 4 requests; `evaluation.marks.max_requests` caps them per run without a prompt, apart from Gemini's guard. Unlike evaluation batches, a mark request is retried once on 429/529, and a failed one only loses its own underlines. Set `evaluation.marks.enabled = false` to turn them off.
