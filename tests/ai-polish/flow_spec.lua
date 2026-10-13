@@ -521,6 +521,47 @@ describe("proofreading flow", function()
       assert.same({ "今日は良い天気です。" }, lines(b))
     end)
 
+    it("shows the held suggestions when the check is run again on the same text, as Kotobae's C", function()
+      local b = open_buffer({ "今日わ良い天気です。" })
+      vim.cmd("AiPolish")
+      gemini_body = requests[#requests].body
+      answer_jev(0)
+      assert.truthy(last_message():find(":AiPolish again shows Gemini's suggestions", 1, true))
+      suggest()
+      local sent = #requests
+      vim.cmd("AiPolish")
+      assert.equals(sent, #requests)
+      assert.is_true(popup.is_open())
+      popup._actions.accept()
+      assert.same({ "今日は良い天気です。" }, lines(b))
+    end)
+
+    it("shows the held suggestions while Gemini is still writing", function()
+      local b = open_buffer({ "今日わ良い天気です。" })
+      vim.cmd("AiPolish")
+      gemini_body = requests[#requests].body
+      answer_jev(0)
+      vim.cmd("AiPolish")
+      assert.falsy(last_message():find("already proofreading", 1, true))
+      suggest()
+      assert.is_true(popup.is_open())
+      popup._actions.accept()
+      assert.same({ "今日は良い天気です。" }, lines(b))
+    end)
+
+    it("checks again when the text changed since", function()
+      local b = open_buffer({ "今日わ良い天気です。" })
+      vim.cmd("AiPolish")
+      gemini_body = requests[#requests].body
+      answer_jev(0)
+      suggest()
+      vim.api.nvim_buf_set_lines(b, 0, -1, false, { "明日わ雨です。" })
+      local sent = #requests
+      vim.cmd("AiPolish")
+      assert.is_true(#requests > sent)
+      assert.is_false(popup.is_open())
+    end)
+
     it("shows suggestions as they come when Jev marks a bunsetsu", function()
       local b = open_buffer({ "今日わ良い天気です。" })
       vim.cmd("AiPolish")
