@@ -187,6 +187,17 @@ sections = { lualine_x = { function() return require("ai-polish").status() end }
 
 The popup's category and severity labels, and the explanation Gemini writes for each suggestion, follow `locale`: `en`, `ja`, `zh-Hans` (Simplified Chinese), or `zh-Hant` (Traditional Chinese); `zh` remains a Simplified alias. When `locale` is unset, it is detected from `v:lang` / `$LANG`, falling back to English. The replacement text itself always stays in the language of your document, and the key hints stay in English.
 
+When your text is Japanese, Gemini also gets rules tuned in [Kotobae](https://github.com/umiyosh/kotobae):
+
+- Product names, versions and dates are taken as written. Misheard English names in voice input (タオリ → Tauri) are written in English when the context makes them clear.
+- Consistent plain (だ・である) or polite (です・ます) endings are kept.
+- Meaningless voice-input fragments are deleted rather than replaced with a guessed word.
+- A sentence-final predicate is rewritten as one fix.
+- Repeated characters (よよよよ) are fixed on their own.
+- Answers are short.
+
+English and Chinese text get the same prompt as before.
+
 ## Optional Jev text evaluation
 
 Before calling Gemini, use Jev to judge whether another proofreading pass is worthwhile. This is optional: without a Jev key, existing proofreading looks and works as before.

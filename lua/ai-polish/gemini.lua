@@ -12,7 +12,8 @@ local MAX_RETRIES = 2
 local MAX_OUTPUT_TOKENS = 16384
 
 ---@param text string
----@param ctx { filetype?: string, split?: { units: ai_polish.Unit[] } } `split` numbers the units
+---@param ctx { filetype?: string, language?: string, split?: { units: ai_polish.Unit[] } }
+---`language` is the text's (jev_segment.language); `split` numbers the units.
 function M.build_body(text, ctx)
   local opts = config.options
   local split = ctx.split
@@ -34,6 +35,7 @@ function M.build_body(text, ctx)
             language = locale.language(),
             instructions = opts.instructions,
             numbered = split ~= nil,
+            japanese = ctx.language == "ja",
           }),
         },
       },
