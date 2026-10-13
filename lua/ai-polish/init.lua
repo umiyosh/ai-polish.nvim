@@ -140,13 +140,17 @@ local function run_chunks(chunks, ctx, on_arrive, on_progress, on_done)
   end
 end
 
----Region text currently covered by the region extmark.
+---Region text currently covered by the region extmark, or nil when it is gone.
 local function region_text(bufnr, mark)
   local m = vim.api.nvim_buf_get_extmark_by_id(bufnr, region_ns, mark, { details = true })
   if not m[1] then
     return nil
   end
-  local lines = vim.api.nvim_buf_get_text(bufnr, m[1], m[2], m[3].end_row, m[3].end_col, {})
+  -- Replacing whole lines can leave the mark's end past the new text.
+  local ok, lines = pcall(vim.api.nvim_buf_get_text, bufnr, m[1], m[2], m[3].end_row, m[3].end_col, {})
+  if not ok then
+    return nil
+  end
   return table.concat(lines, "\n"), m[1], m[2]
 end
 
@@ -195,7 +199,10 @@ local function consider(bufnr, req)
     req.quiet, req.held = true, {}
     quiet[bufnr] = req
     req.spinner.stop()
-    notify("no issues found — :AiPolish review shows Gemini's suggestions")
+    -- Checking again is the way back to Gemini, as Kotobae's C; name the user's own key for it.
+    local panel = require("ai-polish.evaluation_panel")
+    local key = req.whole and panel.mapping(bufnr, "n", "buffer") or panel.mapping(bufnr, "x", "selection")
+    notify(("no issues found — %s again shows Gemini's suggestions"):format(key or ":AiPolish"))
   end
 end
 
@@ -309,9 +316,6 @@ function M.proofread(opts)
   if bufnr == 0 then
     bufnr = vim.api.nvim_get_current_buf()
   end
-  if jobs[bufnr] then
-    return notify("already proofreading this buffer (:AiPolish cancel to stop)", vim.log.levels.WARN)
-  end
   local r = opts.range
   if not r then
     local last = vim.api.nvim_buf_line_count(bufnr) - 1
@@ -319,6 +323,15 @@ function M.proofread(opts)
     r = { 0, 0, last, #last_line }
   end
   local content = table.concat(vim.api.nvim_buf_get_text(bufnr, r[1], r[2], r[3], r[4], {}), "\n")
+  -- Checking a text Jev found fine again shows what Gemini wrote instead of asking again, as
+  -- Kotobae's C does; an edited text is checked anew.
+  local held = quiet[bufnr]
+  if held and region_text(bufnr, held.mark) == content then
+    return reveal(bufnr)
+  end
+  if jobs[bufnr] then
+    return notify("already proofreading this buffer (:AiPolish cancel to stop)", vim.log.levels.WARN)
+  end
   if vim.trim(content) == "" then
     return notify("nothing to proofread", vim.log.levels.WARN)
   end

@@ -261,7 +261,7 @@ For Japanese the unnaturalness level follows [Kotobae](https://github.com/umiyos
 - **Cost:** an evaluation fails as a whole if any request fails, and a 3,000-character text takes roughly 30 more Jev requests than before.
 - **Accuracy:** on Kotobae's graded texts (fresh set) the level agreed with the gold at QWK 0.655, against 0.620 for the local check alone, and rated no correct text 3 or higher.
 
-Proofreading starts this evaluation alongside Gemini. When Jev rates the text 1, puts no early underline, and nothing has been shown yet, you are told `no issues found` right away. Gemini's suggestions are then held until you ask for them with `:AiPolish review`.
+Proofreading starts this evaluation alongside Gemini. When Jev rates the text 1, puts no early underline, and nothing has been shown yet, you are told `no issues found` right away. Gemini's suggestions are then held. Run the same check again (for example your `:AiPolish` mapping) to show them, as Kotobae's C does; the notice names your key. `:AiPolish review` shows them too. If you edited the text in the meantime, the check runs anew.
 
 ### Early underlines (Japanese)
 
