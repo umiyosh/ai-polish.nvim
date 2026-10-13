@@ -118,7 +118,14 @@ function M.ask(bufnr, content, row0, col0)
   local t = M.start(bufnr, content, row0, col0)
   t.job = require("ai-polish.jev_marks").ask(content, key, ev.marks, function(found)
     t:add(found)
-  end, function() end)
+  end, function(total)
+    -- How many marks Jev put once every request answered (Kotobae marksDone); a failed request
+    -- counts none, as there.
+    t.done, t.total = true, total
+    if t.on_done and not t.closed then
+      t.on_done(total)
+    end
+  end)
   return t
 end
 

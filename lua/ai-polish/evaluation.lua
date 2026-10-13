@@ -249,6 +249,9 @@ function M.evaluate(opts)
       s.result, s.text = result, content
     end
     M.schedule() -- honor visibility and active tab; never focus/open here directly
+    if result and opts.on_result then
+      opts.on_result(result)
+    end
   end, planned)
   if not ok then
     s.pending, s.error = nil, "transport"

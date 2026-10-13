@@ -363,9 +363,10 @@ describe("proofreading flow", function()
       vim.cmd("AiPolish cancel")
     end)
 
+    -- Requests for the underlines; the level's mark requests (20 s timeout) are not underlines.
     local function mark_requests()
       return vim.tbl_filter(function(p)
-        return p.jev and vim.json.decode(p.req.body).questions.e0001 ~= nil
+        return p.jev and p.req.timeout_ms == 5000 and vim.json.decode(p.req.body).questions.e0001 ~= nil
       end, pending)
     end
 
@@ -381,7 +382,7 @@ describe("proofreading flow", function()
       assert.equals(0, marked(b))
     end)
 
-    it("does not ask for marks on an automatic evaluation", function()
+    it("does not underline marks on an automatic evaluation", function()
       polish.setup({ api_key = "k" })
       local b = open_buffer({ "今日わ良い天気です。" })
       require("ai-polish.evaluation").evaluate({ bufnr = b, whole = true, automatic = true })
@@ -457,6 +458,79 @@ describe("proofreading flow", function()
       assert.equals("AI Polish: 1", polish.status(b))
       popup._actions.accept()
       assert.same({ "the cat adn dog" }, lines(b))
+    end)
+  end)
+
+  describe("when Jev finds nothing to fix", function()
+    local jev_requests, gemini, gemini_body
+
+    before_each(function()
+      vim.env.TYPESAFE_API_KEY = "jev-key"
+      polish.setup({ api_key = "k" })
+      jev_requests, gemini = {}, nil
+      http.post = function(req, cb)
+        requests[#requests + 1] = req
+        jev_requests[#jev_requests + 1] = { req = req, cb = cb }
+        return { cancel = function() end }
+      end
+      http.stream = function(req, on_data, cb)
+        requests[#requests + 1] = req
+        gemini = { on_data = on_data, cb = cb }
+        return { cancel = function() end }
+      end
+    end)
+
+    -- Answers every Jev request: the text is correct, and `mark` decides each bunsetsu.
+    local function answer_jev(mark)
+      local pending = jev_requests
+      jev_requests = {}
+      for _, p in ipairs(pending) do
+        local answers = {}
+        for k, q in pairs(vim.json.decode(p.req.body).questions) do
+          if q.type == "score" then
+            local probabilities = { ["0"] = 1, ["1"] = 0, ["2"] = 0, ["3"] = 0, ["4"] = 0 }
+            local legend = { ["0"] = "a", ["1"] = "b", ["2"] = "c", ["3"] = "d", ["4"] = "e" }
+            answers[k] = { type = "score", score = 0, confidence = 0.9, probabilities = probabilities, legend = legend }
+          else
+            answers[k] = { type = "noul", noul = k:match("^[eb]%d") and mark or 0.99 }
+          end
+        end
+        p.cb({ status = 200, body = vim.json.encode({ answers = answers }) })
+      end
+    end
+
+    local function suggest()
+      local text = vim.json.encode({ suggestions = { nsug({ body = gemini_body }, "今日わ", "わ", "は") } })
+      local candidate = { content = { parts = { { text = text } } }, finishReason = "STOP" }
+      gemini.on_data("data: " .. vim.json.encode({ candidates = { candidate } }) .. "\n\n")
+      gemini.cb({ status = 200, body = "" })
+    end
+
+    it("says no issues and holds Gemini's suggestions until review", function()
+      local b = open_buffer({ "今日わ良い天気です。" })
+      vim.cmd("AiPolish")
+      gemini_body = requests[#requests].body
+      answer_jev(0)
+      assert.truthy(last_message():find("no issues found", 1, true))
+      suggest()
+      assert.is_false(popup.is_open())
+      assert.is_nil(session.get(b))
+      vim.cmd("AiPolish review")
+      assert.is_true(popup.is_open())
+      popup._actions.accept()
+      assert.same({ "今日は良い天気です。" }, lines(b))
+    end)
+
+    it("shows suggestions as they come when Jev marks a bunsetsu", function()
+      local b = open_buffer({ "今日わ良い天気です。" })
+      vim.cmd("AiPolish")
+      gemini_body = requests[#requests].body
+      answer_jev(0.9)
+      assert.falsy(last_message():find("no issues found", 1, true))
+      suggest()
+      assert.is_true(popup.is_open())
+      popup._actions.accept()
+      assert.same({ "今日は良い天気です。" }, lines(b))
     end)
   end)
 end)

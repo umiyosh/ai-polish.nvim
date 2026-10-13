@@ -178,10 +178,36 @@ local function open_review(bufnr, req, s)
   end
 end
 
+---Checks Jev found nothing to fix in, per buffer: Gemini's suggestions are held until
+---`:AiPolish review` (Kotobae src/proofread/core/quiet.ts).
+---@type table<integer, table>
+local quiet = {}
+
+---Go quiet when Jev rates the text 1, put no underline, and nothing is shown yet: the user sees
+---"no issues found" instead of waiting for Gemini, as in Kotobae. Once Gemini's answer ended or
+---a suggestion is under review, the check is not quiet any more.
+local function consider(bufnr, req)
+  if req.quiet or req.revealed or req.done then
+    return
+  end
+  local marks = req.marks
+  if req.rating == 1 and marks and marks.done and marks.total == 0 and req.received == 0 then
+    req.quiet, req.held = true, {}
+    quiet[bufnr] = req
+    req.spinner.stop()
+    notify("no issues found — :AiPolish review shows Gemini's suggestions")
+  end
+end
+
 ---Suggestions of chunk `i` as Gemini writes them, as in Kotobae: the first opens the review
 ---right away, later ones join it by position, and Jev's marks give way to each.
 local function arrive(bufnr, req, i, sugs)
   if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  if req.quiet then
+    -- Placed only when revealed, where the anchors are then.
+    req.held[#req.held + 1] = { i = i, sugs = sugs }
     return
   end
   local items, dropped = req.arrivals:place(i, sugs)
@@ -209,7 +235,12 @@ local function arrive(bufnr, req, i, sugs)
 end
 
 local function finish(bufnr, req, errors)
-  local target = evaluation_target(bufnr, req)
+  if req.quiet then
+    -- Keep the anchors and what Gemini wrote for `:AiPolish review`.
+    req.finished, req.errors = true, errors
+    return
+  end
+  req.done = true
   pcall(vim.api.nvim_buf_del_extmark, bufnr, region_ns, req.mark)
   req.arrivals:clear()
   clear_marks(bufnr, req)
@@ -229,15 +260,6 @@ local function finish(bufnr, req, errors)
       or ("%d of %d request(s) failed: %s"):format(#errors, #req.chunks, errors[1])
     notify(msg, vim.log.levels.WARN)
   end
-  if target then
-    require("ai-polish.evaluation").evaluate({
-      bufnr = bufnr,
-      whole = target.whole,
-      range = not target.whole and target.range or nil,
-      automatic = true,
-      show = true,
-    })
-  end
   local dropped = req.dropped
   if received == 0 then
     return notify(
@@ -249,6 +271,34 @@ local function finish(bufnr, req, errors)
     msg = msg .. (" (%d unlocatable ignored)"):format(dropped)
   end
   notify(req.opened and msg or (msg .. " — run :AiPolish review to review them"))
+end
+
+---Forget what a quiet check held.
+local function drop_quiet(bufnr)
+  local req = quiet[bufnr]
+  if req then
+    quiet[bufnr] = nil
+    req.arrivals:clear()
+    pcall(vim.api.nvim_buf_del_extmark, bufnr, region_ns, req.mark)
+  end
+end
+
+---Show what a quiet check held, and what Gemini still writes (Kotobae: C / 今すぐチェック).
+local function reveal(bufnr)
+  local req = quiet[bufnr]
+  quiet[bufnr] = nil
+  req.quiet, req.revealed = false, true
+  if not req.finished then
+    req.spinner = progress.start(bufnr)
+    req.on_received()
+  end
+  for _, h in ipairs(req.held) do
+    arrive(bufnr, req, h.i, h.sugs)
+  end
+  req.held = {}
+  if req.finished then
+    finish(bufnr, req, req.errors)
+  end
 end
 
 ---Proofread a region of a buffer (0-based, end-exclusive). Omit `range` for the whole buffer.
@@ -295,6 +345,7 @@ function M.proofread(opts)
 
   session.clear(bufnr)
   popup.close()
+  drop_quiet(bufnr)
 
   -- Japanese text names fixes by bunsetsu number (numbered.lua); other languages quote context.
   local language = require("ai-polish.jev_segment").language(content, config.options.evaluation.language)
@@ -319,7 +370,7 @@ function M.proofread(opts)
     dropped = 0,
   }
   req.marks = tentative.ask(bufnr, content, r[1], r[2])
-  local spinner = progress.start(bufnr)
+  req.spinner = progress.start(bufnr)
   local job = { done = 0, total = #chunks }
   local function label()
     local done = #chunks > 1 and (" %d/%d"):format(job.done, #chunks) or ""
@@ -327,10 +378,28 @@ function M.proofread(opts)
     return req.received > 0 and ("proofreading%s · %d received…"):format(done, req.received)
       or ("proofreading%s…"):format(done)
   end
-  spinner.update(label())
+  req.spinner.update(label())
   function req.on_received()
-    spinner.update(label())
+    req.spinner.update(label())
   end
+  -- Jev evaluates alongside Gemini, as Kotobae's popup does, so a text it finds nothing in can
+  -- go quiet before Gemini's first suggestion.
+  if req.marks then
+    function req.marks.on_done()
+      consider(bufnr, req)
+    end
+  end
+  require("ai-polish.evaluation").evaluate({
+    bufnr = bufnr,
+    whole = req.whole,
+    range = not req.whole and r or nil,
+    automatic = true,
+    show = true,
+    on_result = function(result)
+      req.rating = result.unnaturalness.level
+      consider(bufnr, req)
+    end,
+  })
 
   jobs[bufnr] = job
   local ctx = { filetype = vim.bo[bufnr].filetype, language = language }
@@ -338,10 +407,10 @@ function M.proofread(opts)
     arrive(bufnr, req, i, sugs)
   end, function(done)
     job.done = done
-    spinner.update(label())
+    req.spinner.update(label())
   end, function(errors)
     jobs[bufnr] = nil
-    spinner.stop()
+    req.spinner.stop()
     if vim.api.nvim_buf_is_valid(bufnr) then
       finish(bufnr, req, errors)
     end
@@ -349,13 +418,17 @@ function M.proofread(opts)
 
   function job.cancel()
     cancel()
+    req.done = true
+    if quiet[bufnr] == req then
+      quiet[bufnr] = nil
+    end
     req.arrivals:clear()
     clear_marks(bufnr, req)
     if req.session then
       req.session.streaming, req.session.waiting = nil, nil
       popup.update(req.session)
     end
-    spinner.stop()
+    req.spinner.stop()
     jobs[bufnr] = nil
     pcall(vim.api.nvim_buf_del_extmark, bufnr, region_ns, req.mark)
   end
@@ -409,6 +482,9 @@ end
 
 function M.review(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if quiet[bufnr] then
+    return reveal(bufnr)
+  end
   local s = session.get(bufnr)
   if not s then
     return notify(jobs[bufnr] and "still proofreading…" or "no suggestions for this buffer")
@@ -427,6 +503,7 @@ function M.clear(bufnr)
   popup.close()
   session.clear(bufnr)
   tentative.clear(bufnr)
+  drop_quiet(bufnr)
 end
 
 ---Short status for statuslines: "" when idle.
