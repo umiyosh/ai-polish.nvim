@@ -1,6 +1,7 @@
 local gemini = require("ai-polish.gemini")
 local http = require("ai-polish.http")
 local config = require("ai-polish.config")
+local prompt = require("ai-polish.prompt")
 
 local function response(payload, extra)
   return vim.json.encode(vim.tbl_extend("force", {
@@ -165,7 +166,7 @@ describe("numbered requests (Japanese)", function()
     assert.truthy(system:find("`from`", 1, true))
     assert.falsy(system:find("context_before", 1, true))
     local item = body.generationConfig.responseJsonSchema.properties.suggestions.items
-    assert.same({ "from", "to", "before", "after", "message", "category", "severity" }, item.required)
+    assert.same({ "from", "to", "before", "after", "message", "category" }, item.required)
     assert.is_nil(item.properties.context_before)
   end)
 
@@ -243,6 +244,42 @@ describe("Japanese prompt rules", function()
       local s = system({ language = language })
       assert.falsy(s:find("常体", 1, true), language)
       assert.equals(system({}), s)
+    end
+  end)
+end)
+
+describe("severity from category", function()
+  local function parsed(category, severity)
+    return gemini.parse_response(response({
+      suggestions = {
+        {
+          before = "a",
+          after = { "b" },
+          context_before = "",
+          context_after = "",
+          message = "m",
+          category = category,
+          severity = severity,
+        },
+      },
+    }))[1].severity
+  end
+
+  it("marks errors as warnings and everything else as suggestions, whatever Gemini says", function()
+    for _, c in ipairs({ "typo", "grammar", "punctuation" }) do
+      assert.equals("warning", parsed(c, "info"), c)
+    end
+    for _, c in ipairs({ "style", "clarity", "consistency" }) do
+      assert.equals("suggestion", parsed(c, "critical"), c)
+    end
+    assert.equals("suggestion", parsed("bogus"))
+  end)
+
+  it("no longer asks Gemini for a severity", function()
+    for _, schema in ipairs({ prompt.schema, prompt.numbered_schema }) do
+      local item = schema.properties.suggestions.items
+      assert.is_nil(item.properties.severity)
+      assert.falsy(vim.tbl_contains(item.required, "severity"))
     end
   end)
 end)

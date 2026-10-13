@@ -1,7 +1,17 @@
 local M = {}
 
 M.categories = { "typo", "grammar", "style", "punctuation", "clarity", "consistency" }
-M.severities = { "critical", "warning", "suggestion", "info" }
+
+-- Severity follows the category instead of Gemini's choice, as in Kotobae (umiyosh/kotobae#76):
+-- errors, including a repeated or missing mark, are warnings; everything else is a suggestion.
+-- One fewer field also shortens Gemini's answer.
+local ERRORS = { typo = true, grammar = true, punctuation = true }
+
+---@param category string
+---@return "warning"|"suggestion"
+function M.severity_of(category)
+  return ERRORS[category] and "warning" or "suggestion"
+end
 
 local BASE = [[
 You are a meticulous proofreader and copy editor. Find problems in the given text (typos, grammar, awkward or unclear wording, punctuation, inconsistent notation) and propose corrections.
@@ -91,9 +101,8 @@ M.schema = {
           context_after = { type = "string" },
           message = { type = "string" },
           category = { type = "string", enum = M.categories },
-          severity = { type = "string", enum = M.severities },
         },
-        required = { "before", "after", "context_before", "context_after", "message", "category", "severity" },
+        required = { "before", "after", "context_before", "context_after", "message", "category" },
       },
     },
   },
@@ -108,7 +117,7 @@ do
   item.properties.from = { type = "integer", description = "Number of the first phrase containing the fix." }
   item.properties.to = { type = "integer", description = "Number of the last phrase containing the fix." }
   item.properties.before.description = "Minimal exact substring to replace, inside phrases from..to, without markers."
-  item.required = { "from", "to", "before", "after", "message", "category", "severity" }
+  item.required = { "from", "to", "before", "after", "message", "category" }
 end
 
 return M
