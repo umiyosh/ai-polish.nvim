@@ -206,6 +206,19 @@ local function consider(bufnr, req)
   end
 end
 
+---A typo or grammar error ends the quiet, so "no issues found" does not stay over a mistake
+---Gemini found; rewordings are still held (Kotobae `breaksQuiet`, umiyosh/kotobae#93).
+local function breaks_quiet(sugs)
+  for _, s in ipairs(sugs) do
+    if s.category == "typo" or s.category == "grammar" then
+      return true
+    end
+  end
+  return false
+end
+
+local reveal
+
 ---Suggestions of chunk `i` as Gemini writes them, as in Kotobae: the first opens the review
 ---right away, later ones join it by position, and Jev's marks give way to each.
 local function arrive(bufnr, req, i, sugs)
@@ -215,6 +228,10 @@ local function arrive(bufnr, req, i, sugs)
   if req.quiet then
     -- Placed only when revealed, where the anchors are then.
     req.held[#req.held + 1] = { i = i, sugs = sugs }
+    -- A cleared check keeps streaming into its own `held`, which nothing reveals any more.
+    if breaks_quiet(sugs) and quiet[bufnr] == req then
+      reveal(bufnr)
+    end
     return
   end
   local items, dropped = req.arrivals:place(i, sugs)
@@ -291,7 +308,7 @@ local function drop_quiet(bufnr)
 end
 
 ---Show what a quiet check held, and what Gemini still writes (Kotobae: C / 今すぐチェック).
-local function reveal(bufnr)
+function reveal(bufnr)
   local req = quiet[bufnr]
   quiet[bufnr] = nil
   req.quiet, req.revealed = false, true

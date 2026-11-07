@@ -499,10 +499,21 @@ describe("proofreading flow", function()
       end
     end
 
-    local function suggest()
-      local text = vim.json.encode({ suggestions = { nsug({ body = gemini_body }, "今日わ", "わ", "は") } })
-      local candidate = { content = { parts = { { text = text } } }, finishReason = "STOP" }
+    local function fix(near, before, after, category)
+      local s = nsug({ body = gemini_body }, near, before, after)
+      s.category = category
+      return vim.json.encode(s)
+    end
+
+    -- Sends the next piece of Gemini's answer text as one server-sent event.
+    local function send(piece, finish)
+      local candidate = { content = { parts = { { text = piece } } }, finishReason = finish }
       gemini.on_data("data: " .. vim.json.encode({ candidates = { candidate } }) .. "\n\n")
+    end
+
+    -- A wording fix by default: only typos and grammar errors end the quiet.
+    local function suggest(category)
+      send('{"suggestions":[' .. fix("今日わ", "わ", "は", category or "style") .. "]}", "STOP")
       gemini.cb({ status = 200, body = "" })
     end
 
@@ -519,6 +530,46 @@ describe("proofreading flow", function()
       assert.is_true(popup.is_open())
       popup._actions.accept()
       assert.same({ "今日は良い天気です。" }, lines(b))
+    end)
+
+    it("holds punctuation fixes too", function()
+      local b = open_buffer({ "今日わ良い天気です。" })
+      vim.cmd("AiPolish")
+      gemini_body = requests[#requests].body
+      answer_jev(0)
+      suggest("punctuation")
+      assert.is_false(popup.is_open())
+      assert.is_nil(session.get(b))
+    end)
+
+    for _, category in ipairs({ "typo", "grammar" }) do
+      it(("shows a %s fix with what it held, as Kotobae"):format(category), function()
+        local b = open_buffer({ "今日わ良い天気です。明日も晴れます。" })
+        vim.cmd("AiPolish")
+        gemini_body = requests[#requests].body
+        answer_jev(0)
+        send('{"suggestions":[' .. fix("晴れます", "晴れます", "晴れるでしょう", "style"))
+        assert.is_false(popup.is_open())
+        send(", " .. fix("今日わ", "わ", "は", category))
+        assert.is_true(popup.is_open())
+        assert.equals(2, #session.get(b).items)
+        send("]}", "STOP")
+        gemini.cb({ status = 200, body = "" })
+        popup._actions.accept()
+        popup._actions.accept()
+        assert.same({ "今日は良い天気です。明日も晴れるでしょう。" }, lines(b))
+      end)
+    end
+
+    it("does not show a typo fix that arrives after the check was cleared", function()
+      local b = open_buffer({ "今日わ良い天気です。" })
+      vim.cmd("AiPolish")
+      gemini_body = requests[#requests].body
+      answer_jev(0)
+      vim.cmd("AiPolish clear")
+      suggest("typo")
+      assert.is_false(popup.is_open())
+      assert.is_nil(session.get(b))
     end)
 
     it("shows the held suggestions when the check is run again on the same text, as Kotobae's C", function()
