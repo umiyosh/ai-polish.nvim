@@ -74,24 +74,22 @@ Calling `setup()` is optional; the plugin works with the defaults.
 
 ### Versions and updates
 
-Releases use Git tags in the form `vMAJOR.MINOR.PATCH`. Published versions and release notes are listed on [GitHub Releases](https://github.com/umiyosh/ai-polish.nvim/releases).
-The first planned release is **v0.1.0**. Until its tag is published, use the installation example above, which follows the default branch unless you configured a global version constraint in lazy.nvim.
-
-After v0.1.0 is published, add **one** of these fields to the lazy.nvim specification above:
+Releases use Git tags in the form `vMAJOR.MINOR.PATCH`. The latest version and the release notes are listed on [GitHub Releases](https://github.com/umiyosh/ai-polish.nvim/releases).
+The installation example above follows the default branch unless you configured a global version constraint in lazy.nvim. To install releases instead, add **one** of these fields to it:
 
 | Setting | Update behavior |
 | --- | --- |
-| `version = "^0.1.0"` | Recommended: receive 0.1.x releases, without moving to 0.2.0 |
-| `tag = "v0.1.0"` | Stay on exactly v0.1.0 |
+| `version = "^0.3.0"` | Recommended: receive 0.3.x releases, without moving to 0.4.0 |
+| `tag = "vX.Y.Z"` | Stay on exactly that version (pick one from Releases) |
 | `version = "*"` | Receive the latest release, including new minor/major versions; excludes prerelease tags |
 | `branch = "master", version = false` | Follow development commits instead of releases |
 
 Run `:Lazy update ai-polish.nvim` to update within the selected constraint. Commit your `lazy-lock.json` to reproduce installed revisions; `:Lazy restore` restores them. See lazy.nvim's [versioning](https://lazy.folke.io/spec/versioning) and [lockfile](https://lazy.folke.io/usage/lockfile) documentation.
 
-With [vim-plug](https://github.com/junegunn/vim-plug), use an exact tag in your existing `plug#begin()` / `plug#end()` block after the release is published:
+With [vim-plug](https://github.com/junegunn/vim-plug), add a tag in your existing `plug#begin()` / `plug#end()` block. A wildcard installs the newest matching tag, here the latest 0.3.x; `:PlugUpdate` moves to newer ones:
 
 ```vim
-Plug 'umiyosh/ai-polish.nvim', { 'tag': 'v0.1.0' }
+Plug 'umiyosh/ai-polish.nvim', { 'tag': 'v0.3.*' }
 ```
 
 This plugin requires **Neovim 0.11+**, including when installed with vim-plug; Vim itself is not supported.

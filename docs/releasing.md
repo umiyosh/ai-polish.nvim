@@ -2,7 +2,7 @@
 
 ## Version policy
 
-Git tags are the source of truth for release versions. Use annotated tags named `vMAJOR.MINOR.PATCH`, following [Semantic Versioning](https://semver.org/). The first planned release is `v0.1.0`; adding these instructions does not publish that version.
+Git tags are the source of truth for release versions. Use annotated tags named `vMAJOR.MINOR.PATCH`, following [Semantic Versioning](https://semver.org/). The first release was `v0.1.0`; [GitHub Releases](https://github.com/umiyosh/ai-polish.nvim/releases) lists every published version.
 
 - Before 1.0, keep patch updates compatible within a minor series. Use a new minor version for new features or breaking changes, and explain breaking changes in the release notes.
 - Starting with 1.0, use patch versions for compatible fixes, minor versions for compatible features, and major versions for breaking changes.
@@ -15,7 +15,7 @@ Compatibility covers the documented commands, mappings, configuration, and Lua A
 
 Run these commands from a checkout of this repository with push access. Merge the release changes into `master` first, complete manual verification, and confirm that CI passes for the exact commit to release. Tag publication is a separate maintainer action; opening or merging a PR does not publish a version.
 
-For the first release, fetch the merged commit and inspect it:
+Fetch the merged commit and inspect it:
 
 ```sh
 git fetch origin master --tags
@@ -25,10 +25,18 @@ gh run list --workflow ci.yml --branch master --limit 5
 
 Choose the successful CI run for the inspected commit and use `gh run view RUN_ID --json headSha,conclusion` to confirm its SHA and result. Replace `RELEASE_COMMIT_SHA` below with that full SHA; do not tag an unmerged feature branch.
 
+Choose the new version from every change since the previous tag, not only the last pull request. Replace `vPREVIOUS` with that tag:
+
 ```sh
-git tag -a v0.1.0 RELEASE_COMMIT_SHA -m "ai-polish.nvim v0.1.0"
-git show --no-patch v0.1.0
-git push origin refs/tags/v0.1.0
+git log --oneline vPREVIOUS..origin/master --no-merges
+```
+
+Replace `vX.Y.Z` in the commands below with the new version, then tag and push:
+
+```sh
+git tag -a vX.Y.Z RELEASE_COMMIT_SHA -m "ai-polish.nvim vX.Y.Z"
+git show --no-patch vX.Y.Z
+git push origin refs/tags/vX.Y.Z
 ```
 
 Pushing the tag starts the [Release workflow](../.github/workflows/release.yml). It validates the tag format and that the commit belongs to `master`, runs the existing Neovim test matrix, lint, and format checks against the tagged commit, then publishes a GitHub Release with generated notes. No binary assets or package registry are needed for this Lua plugin.
@@ -39,16 +47,14 @@ Verify the workflow and publication:
 
 ```sh
 gh run list --workflow release.yml --limit 5
-gh release view v0.1.0
+gh release view vX.Y.Z
 ```
 
 Let the workflow create the release, then edit it. Do not run `gh release create` yourself: the workflow leaves an existing release untouched, so a hand-made release would skip its generated notes. Once the release exists, review the generated English notes and rewrite them with the highlights, configuration examples, and any migration guidance before announcing the release:
 
 ```sh
-gh release edit v0.1.0 --notes-file release-notes.md
+gh release edit vX.Y.Z --notes-file release-notes.md
 ```
-
-For subsequent releases, replace `v0.1.0` throughout with the selected version.
 
 ## Verify installation
 
@@ -57,12 +63,12 @@ Once the tag is public, use this lazy.nvim spec in a separate test configuration
 ```lua
 {
   "umiyosh/ai-polish.nvim",
-  version = "^0.1.0",
+  version = "^X.Y.Z",
   cmd = "AiPolish",
   opts = {},
 }
 ```
 
-Remove any local `dir`/`dev` override and conflicting `branch`, `tag`, or `commit` selector from that test configuration. Run `:Lazy update ai-polish.nvim`, restart Neovim, and inspect the plugin revision in `:Lazy`. Run `:AiPolish` on a test document with an API key configured; confirm progress, review, and cancellation work. To pin the exact first release instead, replace `version` with `tag = "v0.1.0"`.
+Remove any local `dir`/`dev` override and conflicting `branch`, `tag`, or `commit` selector from that test configuration. Run `:Lazy update ai-polish.nvim`, restart Neovim, and inspect the plugin revision in `:Lazy`. Run `:AiPolish` on a test document with an API key configured; confirm progress, review, and cancellation work. To pin the exact release instead, replace `version` with `tag = "vX.Y.Z"`.
 
 References: [lazy.nvim versioning](https://lazy.folke.io/spec/versioning), [vim-plug plugin options](https://github.com/junegunn/vim-plug#plug-options), [GitHub CLI release creation](https://cli.github.com/manual/gh_release_create).

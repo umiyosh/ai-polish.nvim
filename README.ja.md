@@ -73,24 +73,22 @@ Jev は、ごく短い応答時間で、妥当な文章評価と AI らしさの
 
 ### バージョンの指定と更新
 
-リリースには `vMAJOR.MINOR.PATCH` 形式の Git タグを付けます。公開済みのバージョンと変更内容は [GitHub Releases](https://github.com/umiyosh/ai-polish.nvim/releases) に掲載します。
-初回は **v0.1.0** を予定しています。タグが公開されるまでは上のインストール例を使ってください。lazy.nvim 全体のバージョン制約を設定していなければ、デフォルトブランチを追従します。
-
-v0.1.0 公開後は、上の lazy.nvim 設定に次のうち **1 つ**を追加できます。
+リリースには `vMAJOR.MINOR.PATCH` 形式の Git タグを付けます。最新のバージョンと変更内容は [GitHub Releases](https://github.com/umiyosh/ai-polish.nvim/releases) に掲載しています。
+上のインストール例は、lazy.nvim 全体のバージョン制約を設定していなければ、デフォルトブランチを追従します。リリース版を使うには、次のうち **1 つ**を追加してください。
 
 | 設定 | 更新時の動作 |
 | --- | --- |
-| `version = "^0.1.0"` | おすすめ。0.1.x のリリースへ更新し、0.2.0 には進みません |
-| `tag = "v0.1.0"` | v0.1.0 に固定します |
+| `version = "^0.3.0"` | おすすめ。0.3.x のリリースへ更新し、0.4.0 には進みません |
+| `tag = "vX.Y.Z"` | 指定したバージョンに固定します（Releases から選びます） |
 | `version = "*"` | 最新リリースへ更新します。minor・major の変更も含み、プレリリースのタグは除外します |
 | `branch = "master", version = false` | リリースではなく開発中のコミットを追従します |
 
 `:Lazy update ai-polish.nvim` で、指定範囲内のバージョンへ更新できます。`lazy-lock.json` をバージョン管理すると導入したコミットを再現でき、`:Lazy restore` で復元できます。詳細は lazy.nvim の [バージョン指定](https://lazy.folke.io/spec/versioning)・[lockfile](https://lazy.folke.io/usage/lockfile) の説明を参照してください。
 
-[vim-plug](https://github.com/junegunn/vim-plug) では、リリース公開後に既存の `plug#begin()` / `plug#end()` 内でタグを指定できます。
+[vim-plug](https://github.com/junegunn/vim-plug) では、既存の `plug#begin()` / `plug#end()` 内でタグを指定します。ワイルドカードを使うと、合うタグのうち最も新しいもの（この例では 0.3.x の最新）が入り、`:PlugUpdate` でより新しいものへ進みます。
 
 ```vim
-Plug 'umiyosh/ai-polish.nvim', { 'tag': 'v0.1.0' }
+Plug 'umiyosh/ai-polish.nvim', { 'tag': 'v0.3.*' }
 ```
 
 vim-plug を使う場合も **Neovim 0.11 以上**が必要です。Vim 本体には対応していません。
