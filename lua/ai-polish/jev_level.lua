@@ -16,8 +16,10 @@ local CORRECTION = 0.37
 
 -- Written style marks about 3% of a correct long text, or up to 2 marks.
 M.WRITTEN = { share = 0.03, marks = 2 }
--- The errors measure marks fewer bunsetsu; with marks of either measure confirming errors, 2%
--- matched the written level on Kotobae's fresh set where errors-only confirmation fell (#77).
+-- The errors measure marks fewer bunsetsu, so the default level uses 2%. Only its own marks
+-- confirm an error: written-style marks confirmed more (QWK 0.621 against 0.584 on Kotobae's
+-- fresh set, kotobae#77), but the default view hides them, which left "needs fixing" with
+-- nothing underlined (kotobae#124).
 M.ERRORS = { share = 0.02, marks = 2 }
 -- A short text counts its marks as if it had this many bunsetsu, so one mark on a sentence of
 -- five bunsetsu does not read as a fifth of the text to rewrite.
@@ -43,14 +45,12 @@ local function corroborated(check, text, marks)
   return false
 end
 
---- Like `level`, with the marks that confirm the local check's errors given apart.
 ---@param check { level: integer, value: number, findings: table[] } the local check
 ---@param marks { from: integer, to: integer }[] the bunsetsu Jev marked
----@param confirming { from: integer, to: integer }[]
 ---@param units integer bunsetsu in the text
 ---@param background ai_polish.Background
 ---@return integer
-function M.level_with(check, text, marks, confirming, units, background)
+function M.level(check, text, marks, units, background)
   local floor = math.max(background.share * units, background.marks)
   local marked = #marks
   if check.value < CORRECTION and marked <= floor then
@@ -66,24 +66,17 @@ function M.level_with(check, text, marks, confirming, units, background)
   -- The local check alone puts correct texts at 3 too often, sometimes with full confidence;
   -- a mark in the same sentence separates those from real errors.
   local error_level = check.level
-  if check.level >= 3 and not corroborated(check, text, confirming) then
+  if check.level >= 3 and not corroborated(check, text, marks) then
     error_level = 2
   end
   return math.min(math.max(error_level, rewrite_level, 2), 5)
 end
 
----@return integer
-function M.level(check, text, marks, units, background)
-  return M.level_with(check, text, marks, marks, units, background)
-end
-
 --- Both levels from the local check and the marks of both measures, as Kotobae's with_marks:
---- the default level counts errors marks with errors and written marks confirming, and the
---- written level counts written marks.
+--- each level counts and confirms with its own measure's marks, the ones its view underlines.
 ---@return integer level, integer written_level
 function M.both(check, text, errors, written, units)
-  local confirming = vim.list_extend(vim.list_extend({}, errors), written)
-  return M.level_with(check, text, errors, confirming, units, M.ERRORS), M.level(check, text, written, units, M.WRITTEN)
+  return M.level(check, text, errors, units, M.ERRORS), M.level(check, text, written, units, M.WRITTEN)
 end
 
 return M

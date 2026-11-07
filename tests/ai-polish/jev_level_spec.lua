@@ -68,11 +68,15 @@ describe("jev_level", function()
     assert.equals(5, level.level(errors, TEXT, marks(33), 100, W))
   end)
 
-  it("confirms errors with the marks given apart", function()
+  it("confirms the default level only with errors marks, as the default view underlines", function()
     local err = check(3, 1.0, "二文目です。")
-    -- Default level: errors marks count the rewriting; marks of either measure confirm.
-    assert.equals(3, level.level_with(err, TEXT, {}, { mark_on("二文目") }, 10, level.ERRORS))
-    assert.equals(2, level.level_with(err, TEXT, {}, {}, 10, level.ERRORS))
+    -- A written-style mark alone is hidden in the default view, so it confirms only the written level.
+    local default, written = level.both(err, TEXT, {}, { mark_on("二文目") }, 10)
+    assert.equals(2, default)
+    assert.equals(3, written)
+    default, written = level.both(err, TEXT, { mark_on("二文目") }, {}, 10)
+    assert.equals(3, default)
+    assert.equals(2, written)
   end)
 end)
 
