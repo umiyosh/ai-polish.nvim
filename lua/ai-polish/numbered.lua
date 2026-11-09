@@ -2,13 +2,18 @@
 --- bunsetsu numbered (〔1〕, 〔2〕, …) and names a fix by the numbers of the bunsetsu it touches
 --- plus the exact text it changes (`before`). Positions then come from the numbers instead of
 --- quoted context, which halved Gemini's output in Kotobae, and a fix whose `before` is not inside
---- its numbers is dropped instead of replacing text Gemini never quoted.
+--- its numbers is dropped instead of replacing text Gemini never quoted. Only one or two characters
+--- Gemini added to `before` are read past (`locate`).
 ---
 --- Offsets are 0-based bytes into the text, end exclusive.
 local M = {}
 
 -- Context kept with a placed fix, so it can still be found after the buffer was edited.
 local CONTEXT_CHARS = 10
+
+-- The most characters Gemini is taken to have added to `before` by mistake (one in every case
+-- seen, Kotobae #114). Longer runs are left to the rule that drops a fix it cannot place.
+local ADDED_CHARS = 2
 
 ---@param text string
 ---@param split { units: ai_polish.Unit[] }
@@ -58,6 +63,69 @@ local function tail(text, n)
   return len <= n and text or vim.fn.strcharpart(text, len - n)
 end
 
+---Byte offsets of the character boundaries in `s`, from 0 to `#s`.
+local function bounds(s)
+  local out = {}
+  for at in s:gmatch("()[%z\1-\127\194-\253][\128-\191]*") do
+    out[#out + 1] = at - 1
+  end
+  out[#out + 1] = #s
+  return out
+end
+
+---The alternatives with `added` taken out where it follows `head`, each different result once.
+local function without_added(after, head, added)
+  local carried = head .. added
+  local out, seen = {}, {}
+  for _, a in ipairs(after) do
+    if a:sub(1, #carried) == carried then
+      a = head .. a:sub(#carried + 1)
+    end
+    if not seen[a] then
+      seen[a] = true
+      out[#out + 1] = a
+    end
+  end
+  return out
+end
+
+---Where `before` lies in `span` (1-based), the text found there, and the alternatives that
+---replace it.
+---
+---Gemini sometimes copies `before` with a character the text does not have: 「からですが、、」 for
+---「からです、、」, and the duplicated comma it meant to fix was never shown (Kotobae #114). When
+---taking at most `ADDED_CHARS` characters out of `before` leaves text inside the span, the fix is
+---placed there. An alternative with the same characters at the same place loses them too: Gemini
+---took them for part of the text, not for a change it meant. The others already read as the text
+---after the fix (「からです、」「からです。」) and stay as written. A character written in place of
+---another still names text that is not there, so that fix is dropped.
+---
+---Only characters with text of `before` on both sides are taken out, unlike Kotobae. Text on both
+---sides that meets in the text shows the characters between were added; with nothing on one side,
+---the rest being in the text does not tell an added character from a replaced one. 「確認した」
+---for a text edited to 「承認した」 would otherwise become a fix of 「した」.
+local function locate(span, before, after)
+  local at = span:find(before, 1, true)
+  if at then
+    return at, before, after
+  end
+  if #after == 0 then
+    return nil
+  end
+  local b = bounds(before)
+  for len = 1, ADDED_CHARS do
+    for k = 2, #b - 1 - len do
+      local i, j = b[k], b[k + len]
+      local kept = before:sub(1, i) .. before:sub(j + 1)
+      at = span:find(kept, 1, true)
+      if at then
+        return at, kept, without_added(after, before:sub(1, i), before:sub(i + 1, j))
+      end
+    end
+  end
+  return nil
+end
+
 ---Whether `raw` names units that exist among `count`.
 function M.in_range(raw, count)
   return type(raw.from) == "number"
@@ -85,12 +153,14 @@ function M.place_span(text, lo, hi, raw)
   if before == "" then
     return nil
   end
-  local at = text:sub(lo + 1, hi):find(before, 1, true)
+  local at, after
+  at, before, after = locate(text:sub(lo + 1, hi), before, raw.after or {})
   if not at then
     return nil
   end
   local start = lo + at - 1
-  local finish, after = take_following_mark(text, start + #before, raw.after or {})
+  local finish
+  finish, after = take_following_mark(text, start + #before, after)
   before = text:sub(start + 1, finish)
   after = vim.tbl_filter(function(a)
     return a ~= before

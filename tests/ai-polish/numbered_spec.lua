@@ -73,6 +73,48 @@ describe("numbered", function()
     assert.is_nil(numbered.place(text, units, fix(1, 2, "考えらえる", { "考えられる" })))
   end)
 
+  describe("with characters Gemini added to before", function()
+    local text = "会議は15時からです、、場所は7階のB会議室です。"
+    local units = split(text, { "会議は", "15時", "場所は", "7階の", "B", "会議室" })
+
+    it("reads past them and takes them out of the alternatives too", function()
+      -- Gemini wrote 「からですが、、」→「からですが、」 for 「からです、、」 in 9 of 72 answers, and
+      -- the duplicated comma was never shown (Kotobae #114). The 「が」 is in neither the text nor
+      -- the change Gemini meant, so it comes out of both.
+      local s = numbered.place(text, units, fix(2, 2, "からですが、、", { "からですが、" }, "punctuation"))
+      assert.equals("からです、、", s.before)
+      assert.equals(#"会議は15時", s.start)
+      assert.same({ "からです、" }, s.after)
+    end)
+
+    it("keeps alternatives that already leave them out, each once", function()
+      local s = numbered.place(
+        text,
+        units,
+        fix(2, 2, "からですが、、", { "からです、", "からです。" }, "punctuation")
+      )
+      assert.same({ "からです、", "からです。" }, s.after)
+      s = numbered.place(
+        text,
+        units,
+        fix(2, 2, "からですが、、", { "からです、", "からですが、" }, "punctuation")
+      )
+      assert.same({ "からです、" }, s.after)
+    end)
+
+    it("still drops a before that is not the text plus one or two characters", function()
+      -- Three added characters are no longer a slip of the copy.
+      assert.is_nil(
+        numbered.place(text, units, fix(2, 2, "からですけれど、、", { "からですけれど、" }))
+      )
+      -- A character written in place of another names text that is not there.
+      assert.is_nil(numbered.place(text, units, fix(2, 2, "からでず、、", { "からでず、" })))
+      -- At either end of before, an added character cannot be told from a replaced one.
+      assert.is_nil(numbered.place(text, units, fix(2, 2, "がらです、、", { "がらです、" })))
+      assert.is_nil(numbered.place(text, units, fix(2, 2, "からです、。", { "からです。" })))
+    end)
+  end)
+
   it("takes in the mark that already follows a fix ending with it", function()
     -- Adopting 「すすん」→「。」 before an existing 「。」 left 「。。」 (Kotobae #76).
     local text = "設定を進めたすすん。"
