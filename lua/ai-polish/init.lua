@@ -190,12 +190,17 @@ local quiet = {}
 ---Go quiet when Jev rates the text 1, put no underline, and nothing is shown yet: the user sees
 ---"no issues found" instead of waiting for Gemini, as in Kotobae. Once Gemini's answer ended or
 ---a suggestion is under review, the check is not quiet any more.
+---Rated above 1 with no underline, the check waits for Gemini and says why: Jev sensed an error
+---it cannot point at (Kotobae: 文章に誤りの気配あり。Gemini で場所を確認中, umiyosh/kotobae#127).
 local function consider(bufnr, req)
   if req.quiet or req.revealed or req.done then
     return
   end
   local marks = req.marks
-  if req.rating == 1 and marks and marks.done and marks.total == 0 and req.received == 0 then
+  if not (req.rating and marks and marks.done and marks.total == 0 and req.received == 0) then
+    return
+  end
+  if req.rating == 1 then
     req.quiet, req.held = true, {}
     quiet[bufnr] = req
     req.spinner.stop()
@@ -203,6 +208,10 @@ local function consider(bufnr, req)
     local panel = require("ai-polish.evaluation_panel")
     local key = req.whole and panel.mapping(bufnr, "n", "buffer") or panel.mapping(bufnr, "x", "selection")
     notify(("no issues found — %s again shows Gemini's suggestions"):format(key or ":AiPolish"))
+  elseif not req.doubted then
+    req.doubted = true
+    req.on_received()
+    notify(("error suspected (unnaturalness %d) — Gemini is locating it"):format(req.rating))
   end
 end
 
@@ -405,7 +414,10 @@ function M.proofread(opts)
   local function label()
     local done = #chunks > 1 and (" %d/%d"):format(job.done, #chunks) or ""
     -- Kotobae shows 受信中 · N件 while suggestions keep coming.
-    return req.received > 0 and ("proofreading%s · %d received…"):format(done, req.received)
+    if req.received > 0 then
+      return ("proofreading%s · %d received…"):format(done, req.received)
+    end
+    return req.doubted and ("error suspected · Gemini locating it%s…"):format(done)
       or ("proofreading%s…"):format(done)
   end
   req.spinner.update(label())

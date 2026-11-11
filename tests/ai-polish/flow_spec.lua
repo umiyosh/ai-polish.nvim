@@ -480,8 +480,9 @@ describe("proofreading flow", function()
       end
     end)
 
-    -- Answers every Jev request: the text is correct, and `mark` decides each bunsetsu.
-    local function answer_jev(mark)
+    -- Answers every Jev request: `mark` decides each bunsetsu, and `sentence` how sure the local
+    -- check is that each sentence and phrase is fine (the text is correct when left out).
+    local function answer_jev(mark, sentence)
       local pending = jev_requests
       jev_requests = {}
       for _, p in ipairs(pending) do
@@ -491,8 +492,10 @@ describe("proofreading flow", function()
             local probabilities = { ["0"] = 1, ["1"] = 0, ["2"] = 0, ["3"] = 0, ["4"] = 0 }
             local legend = { ["0"] = "a", ["1"] = "b", ["2"] = "c", ["3"] = "d", ["4"] = "e" }
             answers[k] = { type = "score", score = 0, confidence = 0.9, probabilities = probabilities, legend = legend }
+          elseif k:match("^[eb]%d") then
+            answers[k] = { type = "noul", noul = mark }
           else
-            answers[k] = { type = "noul", noul = k:match("^[eb]%d") and mark or 0.99 }
+            answers[k] = { type = "noul", noul = k:match("^u_") and sentence or 0.99 }
           end
         end
         p.cb({ status = 200, body = vim.json.encode({ answers = answers }) })
@@ -623,6 +626,70 @@ describe("proofreading flow", function()
       assert.is_true(popup.is_open())
       popup._actions.accept()
       assert.same({ "今日は良い天気です。" }, lines(b))
+    end)
+
+    describe("when Jev rates the text above 1 with nothing marked", function()
+      local progress = require("ai-polish.progress")
+      local orig_start, labels
+
+      before_each(function()
+        labels, orig_start = {}, progress.start
+        progress.start = function(bufnr)
+          local spinner = orig_start(bufnr)
+          local update = spinner.update
+          function spinner.update(label)
+            labels[#labels + 1] = label
+            update(label)
+          end
+          return spinner
+        end
+      end)
+
+      after_each(function()
+        progress.start = orig_start
+      end)
+
+      local function suspected()
+        local n = 0
+        for _, m in ipairs(messages) do
+          n = n + (m.msg:find("error suspected", 1, true) and 1 or 0)
+        end
+        return n
+      end
+
+      -- Kotobae says 文章に誤りの気配あり。Gemini で場所を確認中 instead of waiting with no sign why
+      -- (umiyosh/kotobae#127).
+      it("says once that an error is suspected and Gemini is locating it", function()
+        local b = open_buffer({ "今日わ良い天気です。" })
+        vim.cmd("AiPolish")
+        gemini_body = requests[#requests].body
+        -- The local check alone finds an error: level 2, as no mark confirms it.
+        answer_jev(0, 0.3)
+        assert.equals(1, suspected())
+        assert.truthy(last_message():find("unnaturalness 2", 1, true))
+        assert.falsy(last_message():find("no issues found", 1, true))
+        assert.truthy(labels[#labels]:find("error suspected", 1, true))
+        suggest()
+        assert.is_true(popup.is_open())
+        assert.equals(1, suspected())
+        assert.falsy(labels[#labels]:find("error suspected", 1, true))
+        popup._actions.accept()
+        assert.same({ "今日は良い天気です。" }, lines(b))
+      end)
+
+      it("says nothing of it when Jev marks a bunsetsu or rates the text 1", function()
+        open_buffer({ "今日わ良い天気です。" })
+        vim.cmd("AiPolish")
+        gemini_body = requests[#requests].body
+        answer_jev(0.9, 0.3)
+        suggest()
+        vim.cmd("AiPolish clear")
+        open_buffer({ "明日わ良い天気です。" })
+        vim.cmd("AiPolish")
+        answer_jev(0)
+        assert.equals(0, suspected())
+        vim.cmd("AiPolish cancel")
+      end)
     end)
   end)
 end)
