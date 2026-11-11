@@ -171,6 +171,7 @@ You can keep editing while suggestions are pending. A suggestion whose text you 
 | Suggestions arriving | Gemini's answer streams in. The first suggestion opens the popup right away; later ones join the list in text order, and the count shows `1/3…` until the answer ends. Accept and reject work meanwhile. If you handle every suggestion so far, the popup closes and reopens when the next one arrives |
 | Done | A notification with the count. If the popup could not open (for example, you were in insert mode), you are told to run `:AiPolish review` |
 | Nothing found | `no issues found` |
+| Error suspected | Jev rated the text above 1 but marked nothing: `error suspected (unnaturalness 2) — Gemini is locating it`, and the spinner reads `error suspected · Gemini locating it…` until Gemini's first suggestion |
 | Error | `vim.notify` at ERROR level with the HTTP status, the API error message, or the safety block reason |
 | Partial failure | A WARN when some chunks fail or the answer stops partway; suggestions already received stay |
 | Cancelled | `:AiPolish cancel`, or Cancel in the confirmation dialog |
@@ -259,7 +260,7 @@ For Japanese the unnaturalness level follows [Kotobae](https://github.com/umiyos
 - **Cost:** an evaluation fails as a whole if any request fails, and a 3,000-character text takes roughly 30 more Jev requests than before.
 - **Accuracy:** on Kotobae's graded texts (fresh set) the level agreed with the gold at QWK 0.655, against 0.620 for the local check alone, and rated no correct text 3 or higher.
 
-Proofreading starts this evaluation alongside Gemini. When Jev rates the text 1, puts no early underline, and nothing has been shown yet, you are told `no issues found` right away. Gemini's suggestions are then held, except a typo or grammar fix: one ends the quiet and shows everything held with it, as Kotobae does. Run the same check again (for example your `:AiPolish` mapping) to show them, as Kotobae's C does; the notice names your key. `:AiPolish review` shows them too. If you edited the text in the meantime, the check runs anew.
+Proofreading starts this evaluation alongside Gemini. When Jev rates the text 1, puts no early underline, and nothing has been shown yet, you are told `no issues found` right away. Gemini's suggestions are then held, except a typo or grammar fix: one ends the quiet and shows everything held with it, as Kotobae does. Run the same check again (for example your `:AiPolish` mapping) to show them, as Kotobae's C does; the notice names your key. `:AiPolish review` shows them too. If you edited the text in the meantime, the check runs anew. When Jev rates the text above 1 but puts no early underline, the check waits for Gemini and says why, once: Jev sensed an error it cannot point at, and Gemini is locating it (Kotobae's 文章に誤りの気配あり).
 
 ### Early underlines (Japanese)
 
