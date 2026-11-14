@@ -41,6 +41,7 @@ local NUMBERED = [[
 
 -- Rules Kotobae measured on Japanese text (its system_prompt in src-tauri/src/services/gemini.rs).
 -- Each fixed a failure seen in its runs:
+-- - always: fillers, mishearings and mixed politeness left unfixed in some answers (Kotobae #111)
 -- - names: newer names read as typos (Gemini 3.8 → 1.5), and misheard English names (タオリ) left as is
 -- - fragments: 「…したすすん。」 guessed as 「したら、」 in 3 of 10 runs (Kotobae #76)
 -- - politeness: plain endings rewritten to polite in 4 of 12, stacking politeness (#82)
@@ -49,6 +50,7 @@ local NUMBERED = [[
 local JAPANESE = [[
 
 日本語の文章についての規則:
+- 次のものは、必ず直す提案を出してください: 誤字・誤変換・助詞の誤り、文法の崩れ（語や文末の形が重なったもの、言いかけて言い直した形を含む）、言いよどみやつなぎの言葉（えっと・あの・うーん など）、音声入力の聞き違い、常体と敬体の混在。
 - 固有名詞、製品名、モデル名、バージョン番号、日付の正誤を、あなたの学習時点の知識で判断しないでください。知らない名前や新しい番号でも、書かれたとおり正しいものとして扱います。これらを直したり補ったりしてよいのは、同じ本文の中に根拠がある場合（同じ名前の綴りや番号が本文内で食い違っている、別の箇所に書かれた正式な名前を補う）だけです。ただし、音声入力の聞き違いやカタカナ書きで、英語の製品名・技術名が別の語や音写になっているもの（例: タオリ→Tauri、ジャバスクリプト→JavaScript）は、前後の文脈から指すものが明らかなら英字の正式な表記に直してください。
 - 前後の文脈から意味の取れない音声入力の断片（例: 文末の「すすん」）は、別の語を推測して補わず、削除を提案してください。削除や修正の後も、文は述語で正しく終わるようにしてください（「〜ので。」のように接続の形で終わらせない）。
 - 文末の文体（常体＝だ・である調、敬体＝です・ます調）は、本文でそろっていればそのまま保ってください。常体は書き言葉として正しく、話し言葉ではありません。そろっている文体を別の文体に変える提案はしないでください。常体と敬体が混ざっているときだけ、本文に多い方へそろえる提案をしてください。話し言葉を書き言葉に直すときも、文末は本文に多い方の文体にしてください。
