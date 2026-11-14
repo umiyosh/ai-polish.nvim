@@ -189,6 +189,7 @@ The popup's category and severity labels, and the explanation Gemini writes for 
 
 When your text is Japanese, Gemini also gets rules tuned in [Kotobae](https://github.com/umiyosh/kotobae):
 
+- Typos, misconversions, particle errors, broken grammar (including restarted phrases), fillers (えっと・あの), voice-input mishearings and mixed plain/polite endings are always fixed.
 - Product names, versions and dates are taken as written. Misheard English names in voice input (タオリ → Tauri) are written in English when the context makes them clear.
 - Consistent plain (だ・である) or polite (です・ます) endings are kept.
 - Meaningless voice-input fragments are deleted rather than replaced with a guessed word.

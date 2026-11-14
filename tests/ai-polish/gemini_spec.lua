@@ -234,6 +234,11 @@ describe("Japanese prompt rules", function()
       "なかったと思う",
       "よよよよ",
       "1行",
+      -- What must be fixed every time (Kotobae #111)
+      "誤変換",
+      "えっと",
+      "聞き違い",
+      "常体と敬体の混在",
     }) do
       assert.truthy(s:find(rule, 1, true), rule)
     end
