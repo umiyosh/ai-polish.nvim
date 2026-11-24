@@ -91,9 +91,14 @@ end
 local PROMPT_OVERHEAD_TOKENS = 700
 local OUTPUT_OVERHEAD_TOKENS = 600 -- low-effort thinking + JSON envelope
 
+-- The homophone request (answers.lua): a shorter prompt, and an answer of a few fixes at most.
+local HOMOPHONE_PROMPT_TOKENS = 500
+local HOMOPHONE_OUTPUT_TOKENS = 200
+
 ---@param chunks { text: string }[]
 ---@param pricing AiPolishPricing
-function M.estimate(chunks, pricing)
+---@param homophones? boolean each chunk is also asked for homophones (Japanese text)
+function M.estimate(chunks, pricing, homophones)
   local input, output, chars = 0, 0, 0
   for _, c in ipairs(chunks) do
     local t = M.estimate_tokens(c.text)
@@ -101,9 +106,14 @@ function M.estimate(chunks, pricing)
     input = input + t + PROMPT_OVERHEAD_TOKENS
     -- Suggestions quote the text (before/after/context), so output scales with input.
     output = output + math.ceil(t * 0.6) + OUTPUT_OVERHEAD_TOKENS
+    if homophones then
+      input = input + t + HOMOPHONE_PROMPT_TOKENS
+      output = output + HOMOPHONE_OUTPUT_TOKENS
+    end
   end
   local cost = input / 1e6 * pricing.input_per_mtok + output / 1e6 * pricing.output_per_mtok
-  return { chars = chars, requests = #chunks, input_tokens = input, output_tokens = output, cost_usd = cost }
+  local requests = #chunks * (homophones and 2 or 1)
+  return { chars = chars, requests = requests, input_tokens = input, output_tokens = output, cost_usd = cost }
 end
 
 local function common_suffix(a, b)

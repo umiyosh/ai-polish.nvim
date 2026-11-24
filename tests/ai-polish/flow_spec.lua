@@ -78,14 +78,15 @@ describe("proofreading flow", function()
     reply = function()
       return gemini_reply({})
     end
-    -- The homophone request that goes with Japanese text (answers.lua) is not sent and finds
-    -- nothing, so each test is about the main answer, unless it sets `homophone_reply`.
+    -- The homophone request that goes with Japanese text (answers.lua) is not sent and has found
+    -- nothing by the time the main answer ends, so each test is about the main answer, unless it
+    -- sets `homophone_reply`.
     homophone_reply = nil
     client.proofread_stream = function(text, ctx, on_suggestions, on_done)
       if ctx.kind ~= "homophones" or homophone_reply then
         return orig_proofread_stream(text, ctx, on_suggestions, on_done)
       end
-      vim.schedule(on_done)
+      on_done()
       return { cancel = function() end }
     end
     http.post = function(req, cb)

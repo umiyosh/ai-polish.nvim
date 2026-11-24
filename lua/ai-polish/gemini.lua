@@ -12,35 +12,38 @@ local RETRYABLE = { [429] = true, [500] = true, [502] = true, [503] = true, [504
 local MAX_RETRIES = 2
 local MAX_OUTPUT_TOKENS = 16384
 
+---@class ai_polish.RequestContext
+---@field filetype? string
+---@field language? string the text's (jev_segment.language)
+---@field split? { units: ai_polish.Unit[] } numbers the units
+---@field kind? "homophones" what is asked: nil for the main answer, "homophones" for nothing but
+---real words that do not fit their context, in numbered Japanese text (answers.lua)
+
 ---@param text string
----@param ctx { filetype?: string, language?: string, split?: { units: ai_polish.Unit[] } }
----`language` is the text's (jev_segment.language); `split` numbers the units.
+---@param ctx ai_polish.RequestContext
 function M.build_body(text, ctx)
   local opts = config.options
   local split = ctx.split
+  local homophones = ctx.kind == "homophones"
   local generation = {
     responseMimeType = "application/json",
-    responseJsonSchema = split and prompt.numbered_schema or prompt.schema,
+    responseJsonSchema = homophones and prompt.homophone_schema or split and prompt.numbered_schema or prompt.schema,
     maxOutputTokens = MAX_OUTPUT_TOKENS,
     temperature = opts.temperature,
   }
   if opts.thinking_level then
     generation.thinkingConfig = { thinkingLevel = opts.thinking_level }
   end
+  local system = homophones and prompt.homophone_system({ language = locale.language() })
+    or prompt.system({
+      filetype = ctx.filetype,
+      language = locale.language(),
+      instructions = opts.instructions,
+      numbered = split ~= nil,
+      japanese = ctx.language == "ja",
+    })
   return {
-    systemInstruction = {
-      parts = {
-        {
-          text = prompt.system({
-            filetype = ctx.filetype,
-            language = locale.language(),
-            instructions = opts.instructions,
-            numbered = split ~= nil,
-            japanese = ctx.language == "ja",
-          }),
-        },
-      },
-    },
+    systemInstruction = { parts = { { text = system } } },
     contents = {
       { role = "user", parts = { { text = prompt.user(split and numbered.text(text, split) or text, split ~= nil) } } },
     },
@@ -162,7 +165,7 @@ end
 ---Send one proofreading request. With `ctx.split` the suggestions come back placed by their unit
 ---numbers (`start`/`finish` in `text`), and `dropped` counts those that could not be placed.
 ---@param text string
----@param ctx { filetype?: string, split?: { units: ai_polish.Unit[] } }
+---@param ctx ai_polish.RequestContext
 ---@param cb fun(suggestions: table[]|nil, err: string|nil, usage: table|nil, dropped: integer|nil)
 ---@return { cancel: fun() }
 function M.proofread(text, ctx, cb)
@@ -232,7 +235,7 @@ end
 ---A failed request is retried only while nothing has been handed over, so a suggestion under
 ---review never comes twice.
 ---@param text string
----@param ctx { filetype?: string, language?: string, split?: { units: ai_polish.Unit[] } }
+---@param ctx ai_polish.RequestContext
 ---@param on_suggestions fun(suggestions: table[])
 ---@param on_done fun(err: string|nil, usage: table|nil)
 ---@return { cancel: fun() }

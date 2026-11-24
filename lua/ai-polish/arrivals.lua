@@ -106,7 +106,7 @@ function Arrivals:place(i, raws)
       local a, b = text.locate(cur, raw)
       s = a and vim.tbl_extend("force", raw, { start = a, finish = b })
     end
-    local item
+    local item, found_twice
     if s then
       local row, col = text.pos_at(cur, s.start, scope.row, scope.col)
       local end_row, end_col = text.pos_at(cur, s.finish, scope.row, scope.col)
@@ -114,7 +114,9 @@ function Arrivals:place(i, raws)
       for _, id in ipairs(self.arrived) do
         local r = self:range(id)
         if r and overlaps(r, item) then
-          item = nil
+          -- The homophone check often finds a word the main answer already fixed (answers.lua):
+          -- the fix is under review, not lost.
+          item, found_twice = nil, raw.homophone
           break
         end
       end
@@ -127,7 +129,7 @@ function Arrivals:place(i, raws)
         end_right_gravity = true,
       })
       items[#items + 1] = item
-    else
+    elseif not found_twice then
       dropped = dropped + 1
     end
   end

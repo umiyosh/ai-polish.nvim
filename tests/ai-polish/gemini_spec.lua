@@ -219,6 +219,45 @@ describe("numbered requests (Japanese)", function()
   end)
 end)
 
+-- vim.json.encode writes a table's keys in an order that changes with each Neovim process, and
+-- Gemini writes its answer in the order it is given: with the explanation before the text to
+-- fix, the main answer let 正読 (for 精読) pass (#23).
+describe("the order of a suggestion's fields", function()
+  local function item(ctx)
+    local text = "目視による正読に移行したい。"
+    local split = ctx.language == "ja"
+        and require("ai-polish.units").split(text, {
+          parse = function()
+            return { "目視による", "正読に", "移行したい。" }
+          end,
+        })
+      or nil
+    local body = gemini.build_body(text, vim.tbl_extend("force", { split = split }, ctx))
+    return body.generationConfig.responseJsonSchema.properties.suggestions.items
+  end
+
+  it("is told to Gemini: the place, the text to fix, the fix, then why", function()
+    assert.same(
+      { "before", "after", "context_before", "context_after", "message", "category" },
+      item({ language = "en" }).propertyOrdering
+    )
+    local numbered = { "from", "to", "before", "after", "message", "category" }
+    assert.same(numbered, item({ language = "ja" }).propertyOrdering)
+    assert.same(numbered, item({ language = "ja", kind = "homophones" }).propertyOrdering)
+  end)
+
+  it("names every field", function()
+    for _, ctx in ipairs({ { language = "en" }, { language = "ja" }, { language = "ja", kind = "homophones" } }) do
+      local it = item(ctx)
+      local ordered = vim.deepcopy(it.propertyOrdering)
+      table.sort(ordered)
+      local fields = vim.tbl_keys(it.properties)
+      table.sort(fields)
+      assert.same(fields, ordered)
+    end
+  end)
+end)
+
 describe("homophone requests (Japanese)", function()
   local units = require("ai-polish.units")
   local text = "目視による正読に移行したい。"

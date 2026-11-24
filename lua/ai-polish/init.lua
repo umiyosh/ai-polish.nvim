@@ -1,11 +1,11 @@
 local config = require("ai-polish.config")
-local gemini = require("ai-polish.gemini")
 local text = require("ai-polish.text")
 local session = require("ai-polish.session")
 local popup = require("ai-polish.popup")
 local progress = require("ai-polish.progress")
 local tentative = require("ai-polish.tentative")
 local arrivals = require("ai-polish.arrivals")
+local answers = require("ai-polish.answers")
 
 local M = {}
 
@@ -94,7 +94,8 @@ function M._guard(est)
 end
 
 ---Run `chunks` through Gemini with bounded concurrency, handing over each chunk's suggestions
----as Gemini writes them (`on_arrive(i, suggestions)`).
+---as Gemini writes them (`on_arrive(i, suggestions)`). A chunk of Japanese text takes two requests
+---(answers.lua).
 local function run_chunks(chunks, ctx, on_arrive, on_progress, on_done)
   local errors = {}
   local next_i, running, finished = 1, 0, 0
@@ -107,7 +108,7 @@ local function run_chunks(chunks, ctx, on_arrive, on_progress, on_done)
       running = running + 1
       -- Each chunk numbers its own units from 1.
       local chunk_ctx = vim.tbl_extend("force", ctx, { split = chunks[i].split })
-      handles[i] = gemini.proofread_stream(chunks[i].text, chunk_ctx, function(sugs)
+      handles[i] = answers.stream(chunks[i].text, chunk_ctx, function(sugs)
         if not cancelled then
           on_arrive(i, sugs)
         end
@@ -368,7 +369,8 @@ function M.proofread(opts)
 
   local chunks = text.chunk(content, config.options.chunk.max_chars)
   local model = config.options.model
-  local est = text.estimate(chunks, config.pricing(model))
+  local language = require("ai-polish.jev_segment").language(content, config.options.evaluation.language)
+  local est = text.estimate(chunks, config.pricing(model), language == "ja")
   local verdict = M._guard(est)
   if verdict == "refuse" then
     return notify(
@@ -387,7 +389,6 @@ function M.proofread(opts)
   drop_quiet(bufnr)
 
   -- Japanese text names fixes by bunsetsu number (numbered.lua); other languages quote context.
-  local language = require("ai-polish.jev_segment").language(content, config.options.evaluation.language)
   if language == "ja" then
     local units = require("ai-polish.units")
     for _, c in ipairs(chunks) do
