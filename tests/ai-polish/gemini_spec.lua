@@ -219,6 +219,60 @@ describe("numbered requests (Japanese)", function()
   end)
 end)
 
+describe("homophone requests (Japanese)", function()
+  local units = require("ai-polish.units")
+  local text = "目視による正読に移行したい。"
+  local split = units.split(text, {
+    parse = function()
+      return { "目視による", "正読に", "移行したい。" }
+    end,
+  })
+  local function body(ctx)
+    return gemini.build_body(text, vim.tbl_extend("force", { split = split, language = "ja" }, ctx or {}))
+  end
+
+  it("asks only for real words that do not fit the context", function()
+    local system = body({ kind = "homophones" }).systemInstruction.parts[1].text
+    for _, rule in ipairs({
+      "同音異義語",
+      "前後の文脈と意味が合わない語",
+      "誤変換以外のこと",
+      "造語",
+      "`from`",
+      "1行",
+    }) do
+      assert.truthy(system:find(rule, 1, true), rule)
+    end
+    -- The main answer's rules stay out, so this answer stays short.
+    for _, rule in ipairs({ "言いよどみやつなぎの言葉", "常体は書き言葉", "タオリ" }) do
+      assert.falsy(system:find(rule, 1, true), rule)
+    end
+    -- The reported word is left out of the examples, so measuring it stays honest (Kotobae #89).
+    assert.falsy(system:find("正読", 1, true))
+  end)
+
+  it("sends the same numbered text and thinking level as the main request", function()
+    local main, second = body(), body({ kind = "homophones" })
+    assert.same(main.contents, second.contents)
+    assert.same(main.generationConfig.thinkingConfig, second.generationConfig.thinkingConfig)
+  end)
+
+  it("takes fixes by number, all of them typos", function()
+    local item = body({ kind = "homophones" }).generationConfig.responseJsonSchema.properties.suggestions.items
+    assert.same({ "from", "to", "before", "after", "message", "category" }, item.required)
+    assert.same({ "typo" }, item.properties.category.enum)
+    assert.same(prompt.categories, prompt.numbered_schema.properties.suggestions.items.properties.category.enum)
+  end)
+
+  it("explains in the UI language and leaves the user's instructions to the main request", function()
+    config.setup({ api_key = "k", locale = "en", instructions = "Prefer British spelling." })
+    local system = body({ kind = "homophones" }).systemInstruction.parts[1].text
+    config.setup({ api_key = "k" })
+    assert.truthy(system:find("Write `message` in English", 1, true))
+    assert.falsy(system:find("British", 1, true))
+  end)
+end)
+
 describe("Japanese prompt rules", function()
   local function system(ctx)
     return gemini.build_body("text", ctx).systemInstruction.parts[1].text

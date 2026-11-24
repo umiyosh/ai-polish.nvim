@@ -1,5 +1,6 @@
 -- End-to-end: command/API -> (stubbed) Gemini -> session + popup -> buffer edits.
 local polish = require("ai-polish")
+local client = require("ai-polish.gemini")
 local http = require("ai-polish.http")
 local popup = require("ai-polish.popup")
 local session = require("ai-polish.session")
@@ -63,7 +64,12 @@ end
 
 describe("proofreading flow", function()
   local orig_post, orig_stream, orig_confirm, orig_notify = http.post, http.stream, polish._confirm, vim.notify
-  local requests, reply, messages, jev_env
+  local orig_proofread_stream = client.proofread_stream
+  local requests, reply, homophone_reply, messages, jev_env
+
+  local function asks_for_homophones(req)
+    return vim.json.decode(req.body).systemInstruction.parts[1].text:find("同音異義語", 1, true) ~= nil
+  end
 
   before_each(function()
     jev_env, vim.env.TYPESAFE_API_KEY = vim.env.TYPESAFE_API_KEY, nil
@@ -71,6 +77,16 @@ describe("proofreading flow", function()
     requests, messages = {}, {}
     reply = function()
       return gemini_reply({})
+    end
+    -- The homophone request that goes with Japanese text (answers.lua) is not sent and finds
+    -- nothing, so each test is about the main answer, unless it sets `homophone_reply`.
+    homophone_reply = nil
+    client.proofread_stream = function(text, ctx, on_suggestions, on_done)
+      if ctx.kind ~= "homophones" or homophone_reply then
+        return orig_proofread_stream(text, ctx, on_suggestions, on_done)
+      end
+      vim.schedule(on_done)
+      return { cancel = function() end }
     end
     http.post = function(req, cb)
       requests[#requests + 1] = req
@@ -83,7 +99,7 @@ describe("proofreading flow", function()
     -- Gemini streams: the whole answer comes as one server-sent event.
     http.stream = function(req, on_data, cb)
       requests[#requests + 1] = req
-      local res = reply(req)
+      local res = (asks_for_homophones(req) and homophone_reply or reply)(req)
       vim.schedule(function()
         if res.status == 200 then
           on_data("data: " .. res.body .. "\n\n")
@@ -100,6 +116,7 @@ describe("proofreading flow", function()
   after_each(function()
     popup.close()
     http.post, http.stream, polish._confirm, vim.notify = orig_post, orig_stream, orig_confirm, orig_notify
+    client.proofread_stream = orig_proofread_stream
     vim.env.TYPESAFE_API_KEY = jev_env
   end)
 
@@ -280,6 +297,79 @@ describe("proofreading flow", function()
     vim.cmd("AiPolish cancel")
     assert.is_true(cancelled)
     assert.equals("", polish.status())
+  end)
+
+  -- A real word that does not fit its context (正読 for 精読) passes the main answer, so Japanese
+  -- text is also asked about nothing but such words (#23).
+  describe("with the homophone request", function()
+    local reported = "耳読してから目視による正読に移行したい。"
+
+    it("shows a misconverted word only the homophone request found", function()
+      local b = open_buffer({ reported })
+      homophone_reply = function(req)
+        return gemini_reply({ nsug(req, "正読", "正読", "精読") })
+      end
+      vim.cmd("AiPolish")
+      wait_idle()
+      assert.equals(2, #requests)
+      assert.is_true(popup.is_open())
+      assert.equals("AI Polish: 1", polish.status(b))
+      popup._actions.accept()
+      assert.same({ "耳読してから目視による精読に移行したい。" }, lines(b))
+    end)
+
+    it("shows a fix both answers found once, and does not call the second one unlocatable", function()
+      local b = open_buffer({ reported })
+      reply = function(req)
+        return gemini_reply({ nsug(req, "正読", "正読", "精読") })
+      end
+      homophone_reply = reply
+      vim.cmd("AiPolish")
+      wait_idle()
+      assert.equals("AI Polish: 1", polish.status(b))
+      local m = wait_message("1 suggestion")
+      assert.matches("1 suggestion", m.msg)
+      assert.falsy(m.msg:find("unlocatable", 1, true))
+    end)
+
+    it("keeps the main answer's fixes when the homophone request fails", function()
+      local b = open_buffer({ "今日わ良い天気です。" })
+      reply = function(req)
+        return gemini_reply({ nsug(req, "今日わ", "わ", "は") })
+      end
+      homophone_reply = function()
+        return { status = 400, body = "" }
+      end
+      vim.cmd("AiPolish")
+      wait_idle()
+      assert.equals("AI Polish: 1", polish.status(b))
+      assert.matches("1 suggestion", wait_message("1 suggestion").msg)
+      for _, m in ipairs(messages) do
+        assert.falsy(m.msg:find("HTTP 400", 1, true), m.msg)
+      end
+    end)
+
+    it("is not sent with text that is not Japanese", function()
+      open_buffer({ "Teh cat sat on teh mat." })
+      homophone_reply = function()
+        return gemini_reply({})
+      end
+      vim.cmd("AiPolish")
+      wait_idle()
+      assert.equals(1, #requests)
+    end)
+
+    it("is counted in the estimate shown before sending large text", function()
+      polish.setup({ api_key = "k", guard = { confirm_chars = 100 } })
+      open_buffer({ string.rep("長い文章。", 50) })
+      local asked
+      polish._confirm = function(msg)
+        asked = msg
+        return false
+      end
+      vim.cmd("AiPolish")
+      assert.matches("requests:%s+2", asked)
+    end)
   end)
 
   describe("with Jev's tentative marks", function()

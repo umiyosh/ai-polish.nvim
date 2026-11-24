@@ -61,6 +61,17 @@ describe("text.estimate", function()
     assert.is_true(big.input_tokens >= 35000) -- CJK is counted ~1 token/char
   end)
 
+  it("counts the homophone request that goes with each chunk of Japanese text", function()
+    local p = { input_per_mtok = 1, output_per_mtok = 10 }
+    local chunks = text.chunk(string.rep("長い文章です。", 2000), 6000)
+    local main, both = text.estimate(chunks, p), text.estimate(chunks, p, true)
+    assert.equals(2 * main.requests, both.requests)
+    -- The text goes out twice; the second answer is short.
+    assert.is_true(both.input_tokens > 1.8 * main.input_tokens)
+    assert.is_true(both.output_tokens < 1.2 * main.output_tokens)
+    assert.is_true(both.cost_usd > main.cost_usd)
+  end)
+
   it("counts ASCII at ~4 chars per token", function()
     assert.equals(25, text.estimate_tokens(string.rep("a", 100)))
   end)
