@@ -83,6 +83,15 @@ function M.user(text, numbered)
     .. "\nTEXT>>>"
 end
 
+-- Gemini writes a suggestion's fields in the order of `propertyOrdering`. Left out, it follows the
+-- order of the JSON, which vim.json.encode takes from Lua's table order and so changes with each
+-- Neovim process: with `message` and `category` written before the text to fix, the answer let
+-- 正読 (for 精読) pass in 10 of 10 runs, and with the place and the text first, in none of 48 (#23;
+-- scripts/real-word-errors-live.lua). The order is that of the rules above: where, what to fix,
+-- the fix, then why.
+local CONTEXT_FIELDS = { "before", "after", "context_before", "context_after", "message", "category" }
+local NUMBERED_FIELDS = { "from", "to", "before", "after", "message", "category" }
+
 M.schema = {
   type = "object",
   properties = {
@@ -104,7 +113,8 @@ M.schema = {
           message = { type = "string" },
           category = { type = "string", enum = M.categories },
         },
-        required = { "before", "after", "context_before", "context_after", "message", "category" },
+        required = CONTEXT_FIELDS,
+        propertyOrdering = CONTEXT_FIELDS,
       },
     },
   },
@@ -119,7 +129,7 @@ do
   item.properties.from = { type = "integer", description = "Number of the first phrase containing the fix." }
   item.properties.to = { type = "integer", description = "Number of the last phrase containing the fix." }
   item.properties.before.description = "Minimal exact substring to replace, inside phrases from..to, without markers."
-  item.required = { "from", "to", "before", "after", "message", "category" }
+  item.required, item.propertyOrdering = NUMBERED_FIELDS, NUMBERED_FIELDS
 end
 
 return M
